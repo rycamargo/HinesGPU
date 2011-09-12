@@ -13,8 +13,6 @@
 
 /**
  * TODO:
- * - Executar em múltiplas GPUs [OK]
- *
  * - Implementar neurônios de minha simulação
  * - Implementar rede com múltiplos neurônios
  *
@@ -30,6 +28,8 @@
 #include "HinesStruct.hpp"
 #include <cassert>
 
+#include <cuda.h> // Necessary to allow better eclipse integration
+#include <cuda_runtime_api.h> // Necessary to allow better eclipse integration
 #include <device_launch_parameters.h> // Necessary to allow better eclipse integration
 #include <device_functions.h> // Necessary to allow better eclipse integration
 

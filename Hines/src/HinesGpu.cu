@@ -13,11 +13,6 @@
 
 /**
  * TODO:
- * - Implementar neurônios de minha simulação
- * - Implementar rede com múltiplos neurônios
- *
- * - Testar desempenho e comparar com GENESIS
- *
  * - Otimizar (usar memória compartilhada)
  * - Otimizar (reduzir número de alocações de memória para copiar lista de spikes)
  */

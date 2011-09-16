@@ -586,7 +586,7 @@ int main(int argc, char **argv) {
 			benchConf.printAllVmKernelFinish = 1; //1
 			benchConf.printAllSpikeTimes = 1; //1
 
-			tInfo->sharedData->totalTime   = 10000; // 10s
+			tInfo->sharedData->totalTime   = 1000; // 10s
 			tInfo->sharedData->inputSpikeRate = 0.01;
 			tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/2); // nPyramidal
 			tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/2); // nPyramidal

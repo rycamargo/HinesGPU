@@ -280,26 +280,11 @@ int prepareExecution(HinesMatrix *matrixList, int nNeurons, int kernelSteps, Hin
 int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int startType, int endType, int totalTypes, int threadNumber) {
 
 	HinesMatrix **matrixList = sharedData->matrixList;
-
-
-
-	int nDevices = 0;
-	cudaGetDeviceCount(&nDevices);
-//	int threadDevice = (threadNumber+1)%nDevices;
-//	cudaSetDevice(threadDevice);
-	int threadDevice = threadNumber;
-	cudaSetDevice((threadNumber+1)%nDevices);
-	checkCUDAError("Device selection:");
-
 	ftype totalTime = sharedData->totalTime;
+	ftype dt = matrixList[startType][0].dt;
+	int nSteps = totalTime / dt;
 	int kernelSteps = sharedData->nKernelSteps;
 
-	FILE *nSpkfile 	  = fopen("nSpikeKernel.dat", "w");
-	FILE *lastSpkfile = fopen("lastSpikeKernel.dat", "w");
-
-	/**
-	 * Only one Gpu should update it
-	 */
 	pthread_mutex_lock (sharedData->mutex);
 	if (sharedData->hList == 0) {
 		sharedData->hList   = new HinesStruct *[totalTypes];
@@ -307,71 +292,115 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 		sharedData->synData = new SynapticData;
 		sharedData->synData->spikeListDevice = 0;
 		sharedData->synData->totalTypes = totalTypes;
-
-		if (threadNumber == 0) {
-			bench.totalHinesKernel = 0;
-			bench.totalConnRead    = 0;
-			bench.totalConnWait    = 0;
-			bench.totalConnWrite   = 0;
-		}
 	}
 	pthread_mutex_unlock (sharedData->mutex);
 
-	HinesStruct **hList   = sharedData->hList;
-	HinesStruct **hGpu  = sharedData->hGpu;
+	HinesStruct **hList	= sharedData->hList;
+	HinesStruct **hGpu 	= sharedData->hGpu;
 
-	// Allocates the memory on the GPU and transfers the data
+
+	/*--------------------------------------------------------------
+	 * Select the device attributed to each thread
+	 *--------------------------------------------------------------*/
+	int nDevices = 0;
+	cudaGetDeviceCount(&nDevices);
+	cudaSetDevice((threadNumber+3)%nDevices);
+
+	int deviceNumber=-1;
+    cudaGetDevice(&deviceNumber);
+    struct cudaDeviceProp prop;
+    cudaGetDeviceProperties ( &prop, deviceNumber );
+	checkCUDAError("Device selection:");
+	//--------------------------------------------------------------
+
+	/*--------------------------------------------------------------
+	 * Configure number of threads and shared memory size for each kernel
+	 *--------------------------------------------------------------*/
+	//int nThreadsProc  	= 64;
+	int maxThreadsProc  = 64;
+	int maxThreadsComm	= 16;
+	int sharedMemSizeProc = 15 * 1024; 	// Valid for capability 1.x (16kB)
+	int sharedMemSizeComm = 15 * 1024; 	// Valid for capability 1.x (16kB)
+
+	if (prop.major == 2) {
+		//nThreadsProc 	= 256;
+		maxThreadsProc 	= 256;
+		maxThreadsComm 	= 32; 				// or can be 64
+		sharedMemSizeProc = 47 * 1024; 	// Valid for capability 2.x (48kB)
+		sharedMemSizeComm = 15 * 1024; 	// Valid for capability 2.x (48kB)
+	}
+	//--------------------------------------------------------------
+
+	int nBlocksProc[totalTypes];
+	for (int type = startType; type < endType; type++) {
+		// Number of blocks: multiple of #GPU multiprocessors and respects maxThreadsProc condition
+		nBlocksProc[type] = prop.multiProcessorCount * (nNeurons[type] / maxThreadsProc / prop.multiProcessorCount);
+		if (nNeurons[type] % maxThreadsProc != 0  || (nNeurons[type] / maxThreadsProc) % maxThreadsProc != 0)
+			nBlocksProc[type] += prop.multiProcessorCount;
+	}
+
+	//	if (nComp0 <= 4) nThreads = (sizeof (ftype) == 4) ? 196 : 96;
+	//	else if (nComp0 <= 8) nThreads = (sizeof (ftype) == 4) ? 128 : 64;
+	//	else if (nComp0 <= 12) nThreads = (sizeof (ftype) == 4) ? 96 : 32;
+	//	else if (nComp0 <= 16) nThreads = (sizeof (ftype) == 4) ? 64 : 32;
+
+
+	FILE *nSpkfile 	  = fopen("nSpikeKernel.dat", "w");
+	FILE *lastSpkfile = fopen("lastSpikeKernel.dat", "w");
+
+	/*--------------------------------------------------------------
+	 * Initializes the bechmark counters
+	 *--------------------------------------------------------------*/
+	if (threadNumber == 0) {
+		bench.totalHinesKernel = 0;
+		bench.totalConnRead    = 0;
+		bench.totalConnWait    = 0;
+		bench.totalConnWrite   = 0;
+	}
+
+	/*--------------------------------------------------------------
+	 * Allocates the memory on the GPU for neuron information and transfers the data
+	 *--------------------------------------------------------------*/
 	for (int type = startType; type < endType; type++) {
 		prepareExecution(matrixList[type], nNeurons[type], kernelSteps, &(hList[type]), type);
 		if (benchConf.verbose)
-			printf("GPU allocation with %d neurons, %d comparts on device %d.\n", nNeurons[type], matrixList[type][0].nComp, threadDevice);
+			printf("GPU allocation with %d neurons, %d comparts on device %d.\n", nNeurons[type], matrixList[type][0].nComp, threadNumber);
 	}
 
-	ftype dt = matrixList[startType][0].dt;
-	int nSteps = totalTime / dt;
-
-	prepareSynapses(sharedData, nNeurons, startType, endType, threadDevice, nDevices);
+	/*--------------------------------------------------------------
+	 * Allocates the memory on the GPU for the communications and transfers the data
+	 *--------------------------------------------------------------*/
+	prepareSynapses(sharedData, nNeurons, startType, endType, threadNumber, nDevices);
 	SynapticData *synData = sharedData->synData;
 
-	/**
-	 * Send data to Gpu
-	 */
+	/*--------------------------------------------------------------
+	 * Sends the complete data to the GPUs
+	 *--------------------------------------------------------------*/
 	for (int type = startType; type < endType; type++) {
 		cudaMalloc((void **)&(hGpu[type]), sizeof(HinesStruct)*nNeurons[type]);
 		cudaMemcpy(hGpu[type], hList[type], sizeof(HinesStruct)*nNeurons[type], cudaMemcpyHostToDevice);
 		checkCUDAError("Memory Allocation:");
 	}
 
-	int nComp0 = matrixList[startType][0].nComp;
-	int timeSerieMemSize = sizeof(ftype) * (nComp0 * kernelSteps);
-
-	/**
-	 * Perform the execution
-	 */
-	int nThreads = 64; // 64
-//	if (nComp0 <= 4) nThreads = (sizeof (ftype) == 4) ? 196 : 96;
-//	else if (nComp0 <= 8) nThreads = (sizeof (ftype) == 4) ? 128 : 64;
-//	else if (nComp0 <= 12) nThreads = (sizeof (ftype) == 4) ? 96 : 32;
-//	else if (nComp0 <= 16) nThreads = (sizeof (ftype) == 4) ? 64 : 32;
-
-	int nBlocks = nNeurons[startType]/nThreads;
-	if (nNeurons[startType]%nThreads != 0) nBlocks++;
-	if (nBlocks == 1) nThreads = nNeurons[startType];
-	printf("Launching GPU kernel with %d blocks and %d threads per block types:%d-%d on device %d.\n", nBlocks, nThreads, startType, endType, (threadNumber+1)%nDevices);
-
+	/*--------------------------------------------------------------
+	 * Used to obtain the Vm of neurons and write to files
+	 *--------------------------------------------------------------*/
 	FILE *outFile;
 	outFile = fopen("sampleVm.dat", "w");
-
 	FILE *vmKernelFile;
 	vmKernelFile = fopen("vmKernel.dat", "w");
 
 	int nVmTimeSeries = 4;
 	ftype **vmTimeSerie  = (ftype **)malloc(sizeof(ftype *) * nVmTimeSeries);
+	int nCompVmTimeSerie = matrixList[startType][0].nComp;
+	int vmTimeSerieMemSize = sizeof(ftype) * (nCompVmTimeSerie * kernelSteps);
 	for (int k=0; k<nVmTimeSeries; k++)
-		vmTimeSerie[k] = (ftype *)malloc(timeSerieMemSize);
+		vmTimeSerie[k] = (ftype *)malloc(vmTimeSerieMemSize);
+	//--------------------------------------------------------------
 
-	int sharedMemorySize = 15 * 1024; // Valid for CUDA 1.3 (16kb)
-
+	/*--------------------------------------------------------------
+	 * Creates the connections between the neurons
+	 *--------------------------------------------------------------*/
 	if (threadNumber == 0) {
 		sharedData->connection = new Connections();
 		sharedData->connection->connectRandom (sharedData->pyrConnRatio, sharedData->inhConnRatio,
@@ -383,10 +412,10 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 		}
 	}
 
-	/**
+	/*--------------------------------------------------------------
 	 * Prepare the spike list in the format used in the GPU
-	 */
-	int maxSpikesNeuron = 3000; //5000;
+	 *--------------------------------------------------------------*/
+	int maxSpikesNeuron = 5000; //5000;
 	for (int type = startType; type < endType; type++) {
 		int neuronSpikeListSize = maxSpikesNeuron * nNeurons[type];
 		synData->spikeListGlobal[type]  = (ftype *) malloc( sizeof(ftype) * neuronSpikeListSize );
@@ -398,7 +427,7 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 	}
 
 	/**
-	 * Guarantees that all connectionshave been setup
+	 * Guarantees that all connections have been setup
 	 */
 	pthread_mutex_lock (sharedData->mutex);
 	sharedData->nBarrier++;
@@ -410,19 +439,23 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 	}
 	pthread_mutex_unlock (sharedData->mutex);
 
-	/**
-	 * Creates the connections for usage in the GPU communications mode
-	 */
-	int nGroups[totalTypes];
+	/*--------------------------------------------------------------
+	 * Creates the connection list for usage in the GPU communication
+	 * Should be performed after the connection information from all neurons is available
+	 *--------------------------------------------------------------*/
+	int nBlocksComm[totalTypes];
 	if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM) {
 		for (int type = startType; type < endType; type++) {
-			int ng = 16;
-			nGroups[type] = ng * ((nNeurons[type] / ng / ng) + 1);
-			if (nNeurons[type] % ng == 0  && (nNeurons[type] / ng) % ng == 0) nGroups[type] -= ng;
+
+			// Number of blocks: multiple of #GPU multiprocessors and respects maxThreadsComm condition
+			nBlocksComm[type] = prop.multiProcessorCount * (nNeurons[type] / maxThreadsComm / prop.multiProcessorCount);
+			if (nNeurons[type] % maxThreadsComm != 0  || (nNeurons[type] / maxThreadsComm) % maxThreadsComm != 0)
+				nBlocksComm[type] += prop.multiProcessorCount;
+
 			sharedData->connGpuListHost[type] =
-					createGpuConnections( sharedData->connection, type, totalTypes, nNeurons, nGroups[type]);
-			cudaMalloc( (void **)&(sharedData->connGpuListDevice[type]), nGroups[type] * sizeof(ConnGpu) );
-			cudaMemcpy(sharedData->connGpuListDevice[type], sharedData->connGpuListHost[type], nGroups[type] * sizeof(ConnGpu), cudaMemcpyHostToDevice);
+					createGpuConnections( sharedData->connection, type, totalTypes, nNeurons, nBlocksComm[type]);
+			cudaMalloc( (void **)&(sharedData->connGpuListDevice[type]), nBlocksComm[type] * sizeof(ConnGpu) );
+			cudaMemcpy(sharedData->connGpuListDevice[type], sharedData->connGpuListHost[type], nBlocksComm[type] * sizeof(ConnGpu), cudaMemcpyHostToDevice);
 
 		}
 
@@ -432,54 +465,60 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 	 * Prepare the spike control lists used for GPU spike delivery
 	 */
 	if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM) {
-		synData->spikeTimeListGpusHost[threadDevice] = (ftype **) malloc( sizeof(ftype *) * totalTypes );
+		synData->spikeTimeListGpusHost[threadNumber] = (ftype **) malloc( sizeof(ftype *) * totalTypes );
 		for (int type = 0; type < totalTypes; type++) {
 			int spikeTimeListSize = matrixList[type][0].spikeTimeListSize;
 			if (startType <= type && type < endType)
-				synData->spikeTimeListGpusHost[threadDevice][type] = synData->spikeTimeListDevice[type];
+				synData->spikeTimeListGpusHost[threadNumber][type] = synData->spikeTimeListDevice[type];
 			else
-				cudaMalloc ((void **) &(synData->spikeTimeListGpusHost[threadDevice][type]),
+				cudaMalloc ((void **) &(synData->spikeTimeListGpusHost[threadNumber][type]),
 						sizeof(ftype) * spikeTimeListSize * nNeurons[type]);
 		}
-		cudaMalloc( (void **) &synData->spikeTimeListGpusDev[threadDevice], sizeof(ftype *) * totalTypes);
-		cudaMemcpy(synData->spikeTimeListGpusDev[threadDevice], synData->spikeTimeListGpusHost[threadDevice],
+		cudaMalloc( (void **) &synData->spikeTimeListGpusDev[threadNumber], sizeof(ftype *) * totalTypes);
+		cudaMemcpy(synData->spikeTimeListGpusDev[threadNumber], synData->spikeTimeListGpusHost[threadNumber],
 				sizeof(ftype *) * totalTypes, cudaMemcpyHostToDevice);
 
-		synData->nGeneratedSpikesGpusHost[threadDevice] = (ucomp **) malloc( sizeof(ucomp *) * totalTypes );
+		synData->nGeneratedSpikesGpusHost[threadNumber] = (ucomp **) malloc( sizeof(ucomp *) * totalTypes );
 		for (int type = 0; type < totalTypes; type++) {
 			if (startType <= type && type < endType)
-				synData->nGeneratedSpikesGpusHost[threadDevice][type] = synData->nGeneratedSpikesDevice[type];
+				synData->nGeneratedSpikesGpusHost[threadNumber][type] = synData->nGeneratedSpikesDevice[type];
 			else
-				cudaMalloc ((void **) &(synData->nGeneratedSpikesGpusHost[threadDevice][type]), sizeof(ucomp) * nNeurons[type]);
+				cudaMalloc ((void **) &(synData->nGeneratedSpikesGpusHost[threadNumber][type]), sizeof(ucomp) * nNeurons[type]);
 		}
-		cudaMalloc( (void **) &synData->nGeneratedSpikesGpusDev[threadDevice], sizeof(ucomp *) * totalTypes);
-		cudaMemcpy(synData->nGeneratedSpikesGpusDev[threadDevice], synData->nGeneratedSpikesGpusHost[threadDevice],
+		cudaMalloc( (void **) &synData->nGeneratedSpikesGpusDev[threadNumber], sizeof(ucomp *) * totalTypes);
+		cudaMemcpy(synData->nGeneratedSpikesGpusDev[threadNumber], synData->nGeneratedSpikesGpusHost[threadNumber],
 				sizeof(ucomp *) * totalTypes, cudaMemcpyHostToDevice);
 	}
 
-	/**
-	 * Synchronize threads before beginning
-	 */
-	pthread_mutex_lock (sharedData->mutex);
-	sharedData->nBarrier++;
-	if (sharedData->nBarrier < sharedData->nThreadsCpu)
-		pthread_cond_wait(sharedData->cond, sharedData->mutex);
-	else {
-		sharedData->nBarrier = 0;
-		pthread_cond_broadcast(sharedData->cond);
-	}
-	pthread_mutex_unlock (sharedData->mutex);
+	/*--------------------------------------------------------------
+	 * Synchronize threads before beginning [Used only for Benchmarking]
+	 *--------------------------------------------------------------*/
+	//pthread_mutex_lock (sharedData->mutex);
+	//sharedData->nBarrier++;
+	//if (sharedData->nBarrier < sharedData->nThreadsCpu)
+	//	pthread_cond_wait(sharedData->cond, sharedData->mutex);
+	//else {
+	//	sharedData->nBarrier = 0;
+	//	pthread_cond_broadcast(sharedData->cond);
+	//}
+	//pthread_mutex_unlock (sharedData->mutex);
 
+
+	printf("Launching GPU kernel with %d blocks and %d (+1) threads per block for "
+			"types %d-%d for thread %d on device %d [%s|%d.%d|MP=%d|G=%dMB|S=%dkB].\n",
+			nBlocksProc[startType], nNeurons[startType]/nBlocksProc[startType],
+			startType, endType-1, threadNumber, deviceNumber,
+			prop.name, prop.major, prop.minor, prop.multiProcessorCount,
+			prop.totalGlobalMem/1024/1024, prop.sharedMemPerBlock/1024);
 
 	if (threadNumber == 0) {
 		bench.execPrepare  = gettimeInMilli();
 		bench.execPrepareF = (bench.execPrepare - bench.matrixSetup)/1000.;
 	}
 
-
-	/**
+	/*--------------------------------------------------------------
 	 * Solves the matrix for n steps
-	 */
+	 *--------------------------------------------------------------*/
 	for (int kStep = 0; kStep < nSteps; kStep += kernelSteps) {
 
 		if (threadNumber == 0 && kStep % 100 == 0)
@@ -488,51 +527,48 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 		if (threadNumber == 0) // Benchmarking
 			bench.kernelStart  = gettimeInMilli();
 
+		checkCUDAError("Before SolveMatrixG Kernel:");
 		for (int type = startType; type < endType; type++) {
 
-			checkCUDAError("Before SolveMatrixG Kernel:");
-			solveMatrixG<<<nBlocks,nThreads, sharedMemorySize>>>(hGpu[type], kernelSteps, nNeurons[type],
+			int nThreadsProc =  nNeurons[type]/nBlocksProc[type];
+			if (nNeurons[type] % nBlocksProc[type]) nThreadsProc++;
+
+			solveMatrixG<<<nBlocksProc[type], nThreadsProc, sharedMemSizeProc>>>(hGpu[type], kernelSteps, nNeurons[type],
 					synData->spikeListDevice[type], synData->weightListDevice[type],
 					synData->spikeListPosDevice[type], synData->spikeListSizeDevice[type],
 					synData->vmListDevice[type]);
-			checkCUDAError("SolveMatrixG Kernel:");
 		}
 
 		cudaThreadSynchronize();
+		checkCUDAError("Sync:");
 		if (threadNumber == 0) // Benchmarking
 			bench.kernelFinish = gettimeInMilli();
 
-		if (benchConf.verbose == 1) {
-			//cudaThreadSynchronize();
-			checkCUDAError("Sync:");
+		if (benchConf.verbose == 1)
 			printf("Finished Kernel %d -----------> %d \n", threadNumber, kStep);
-		}
 
-		/**
-		 * Check if Vm is ok for all neurons
-		 */
-		if (benchConf.assertResultsAll == 1 || benchConf.printAllVmKernelFinish == 1) {
-			for (int type = startType; type < endType; type++) {
-
+		/*--------------------------------------------------------------
+		 * - Copy the Vm from GPUs to the CPU memory
+		 * - Check if Vm is ok for all neurons
+		 *--------------------------------------------------------------*/
+		if (benchConf.assertResultsAll == 1 || benchConf.printAllVmKernelFinish == 1)
+			for (int type = startType; type < endType; type++)
 				cudaMemcpy(synData->vmListHost[type], synData->vmListDevice[type], sizeof(ftype) * nNeurons[type], cudaMemcpyDeviceToHost);
-
-				if (benchConf.assertResultsAll == 1) {
-					for (int n = 0; n < nNeurons[type]; n++) {
-						if ( synData->vmListHost[type][n] < -500 || 500 < synData->vmListHost[type][n] || synData->vmListHost[type][n] == 0.000000000000) {
-							printf("********* type=%d neuron=%d %.2f\n", type, n, synData->vmListHost[type][n]);
-							assert(false);
-						}
+		if (benchConf.assertResultsAll == 1)
+			for (int type = startType; type < endType; type++)
+				for (int n = 0; n < nNeurons[type]; n++)
+					if ( synData->vmListHost[type][n] < -500 || 500 < synData->vmListHost[type][n] || synData->vmListHost[type][n] == 0.000000000000) {
+						printf("********* type=%d neuron=%d %.2f\n", type, n, synData->vmListHost[type][n]);
+						assert(false);
 					}
-				}
-			}
-		}
+		 //--------------------------------------------------------------
 
 		if (benchConf.verbose == 1)
 			printf("Getting spikes %d\n", threadNumber);
 
-		/**
+		/*--------------------------------------------------------------
 		 * Reads information from spike sources
-		 * */
+		 *--------------------------------------------------------------*/
 		for (int type = startType; type < endType; type++) {
 
 			HinesStruct & hType = hList[type][0];
@@ -542,10 +578,10 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 			cudaMemcpy(synData->nGeneratedSpikesHost[type], synData->nGeneratedSpikesDevice[type], 
 				   sizeof(ucomp) * nNeurons[type], cudaMemcpyDeviceToHost);
 			checkCUDAError("Synapses2:");
-
-			cudaThreadSynchronize(); // Used to prevent reads of local memory before the copy
-
 		}
+		cudaThreadSynchronize(); // Used to prevent reads of host memory before the copy
+		 //--------------------------------------------------------------
+
 
 		for (int type = startType; type < endType; type++) {
 
@@ -607,7 +643,7 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 
 
 		/**
-		 * Prints the Vm at the end of each kernel execution
+		 * Writes Vm to file at the end of each kernel execution
 		 */
 		if (threadNumber == 0 && benchConf.printAllVmKernelFinish == 1) {
 			for (int type = 0; type < totalTypes; type++) {
@@ -629,22 +665,24 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 			for (int type = 0; type < totalTypes; type++) {
 
 				if (type < startType || endType <= type) {
-					cudaMemcpy(synData->spikeTimeListGpusHost[threadDevice][type], synData->spikeTimeListHost[type],    
+					cudaMemcpy(synData->spikeTimeListGpusHost[threadNumber][type], synData->spikeTimeListHost[type],
 						   sizeof(ftype) * hList[type][0].spikeTimeListSize * nNeurons[type], cudaMemcpyHostToDevice);
-					cudaMemcpy(synData->nGeneratedSpikesGpusHost[threadDevice][type], synData->nGeneratedSpikesHost[type], 
+					cudaMemcpy(synData->nGeneratedSpikesGpusHost[threadNumber][type], synData->nGeneratedSpikesHost[type],
 						   sizeof(ucomp) * nNeurons[type], cudaMemcpyHostToDevice);
 				}
 			}
 		}
 
 
+		/*-------------------------------------------------------
+		 *  Generates random spikes for the network
+		 *-------------------------------------------------------*/
 		for (int type = startType; type < endType; type++) {
 
 			int randomSpikeListSize = sharedData->inputSpikeRate * kernelSteps * dt * nNeurons[type] * 2;
 			ftype *randomSpikeTimes = new ftype[ randomSpikeListSize ];
 			int *randomSpikeDest = new int[ randomSpikeListSize ];
 
-			// Add some random spikes
 			int nRandom = 0;
 			for (int neuron = 0; neuron < nNeurons[type]; neuron++) {
 				HinesMatrix & m = matrixList[type][neuron];
@@ -666,10 +704,7 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 						if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == CPU_COMM)
 							m.synapticChannels->addSpike(0, spkTime, 1);
 					}
-
-
 				}
-
 			}
 
 			int nThreadsComm = 0;
@@ -696,15 +731,16 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 				 * Performs the Gpu communication
 				 */
 				nThreadsComm = sharedData->connGpuListHost[type][0].nNeuronsGroup;
+
 				if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE) {
 
 					uint64 connTmp = 0;
 					if (threadNumber == 0 && benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE)
 						connTmp = gettimeInMilli();
 
-					performCommunicationsG <<<nGroups[type], nThreadsComm, sharedMemorySize>>> ( nNeurons[type],
+					performCommunicationsG <<<nBlocksComm[type], nThreadsComm, sharedMemSizeComm>>> ( nNeurons[type],
 						sharedData->connGpuListDevice[type],
-						synData->nGeneratedSpikesGpusDev[threadDevice], synData->spikeTimeListGpusDev[threadDevice],
+						synData->nGeneratedSpikesGpusDev[threadNumber], synData->spikeTimeListGpusDev[threadNumber],
 						hGpu[type], synData->spikeListDevice[type], synData->weightListDevice[type],
 						synData->spikeListPosDevice[type], synData->spikeListSizeDevice[type],
 						randomSpikeTimesDev, randomSpikeDestDev);
@@ -725,8 +761,8 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 					if (threadNumber == 0)
 						connTmp = gettimeInMilli();
 					//int sharedMemComSize = sharedMemorySize/10;
-					performCommunicationsG_Step1 <<<nGroups[type], nThreadsComm, sharedMemorySize>>> ( nNeurons[type], sharedData->connGpuListDevice[type],
-						synData->nGeneratedSpikesGpusDev[threadDevice], synData->spikeTimeListGpusDev[threadDevice],
+					performCommunicationsG_Step1 <<<nBlocksComm[type], nThreadsComm, sharedMemSizeComm>>> ( nNeurons[type], sharedData->connGpuListDevice[type],
+						synData->nGeneratedSpikesGpusDev[threadNumber], synData->spikeTimeListGpusDev[threadNumber],
 						hGpu[type], synData->spikeListDevice[type], synData->weightListDevice[type],
 						synData->spikeListPosDevice[type], synData->spikeListSizeDevice[type],
 						randomSpikeTimesDev, randomSpikeDestDev, tmpDevMemory);
@@ -738,8 +774,8 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 						connTmp = gettimeInMilli();
 					}
 
-					performCommunicationsG_Step2 <<<nGroups[type], nThreadsComm, sharedMemorySize>>> ( nNeurons[type], sharedData->connGpuListDevice[type],
-						synData->nGeneratedSpikesGpusDev[threadDevice], synData->spikeTimeListGpusDev[threadDevice],
+					performCommunicationsG_Step2 <<<nBlocksComm[type], nThreadsComm, sharedMemSizeComm>>> ( nNeurons[type], sharedData->connGpuListDevice[type],
+						synData->nGeneratedSpikesGpusDev[threadNumber], synData->spikeTimeListGpusDev[threadNumber],
 						hGpu[type], synData->spikeListDevice[type], synData->weightListDevice[type],
 						synData->spikeListPosDevice[type], synData->spikeListSizeDevice[type],
 						randomSpikeTimesDev, randomSpikeDestDev, tmpDevMemory);
@@ -969,19 +1005,19 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 
 			int t1 = 0, n1 = 0;
 			if (startType <= t1 && t1 < endType)
-				cudaMemcpy(vmTimeSerie[0],  hList[t1][n1].vmTimeSerie, timeSerieMemSize, cudaMemcpyDeviceToHost);
+				cudaMemcpy(vmTimeSerie[0],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 
 			t1 = 0; n1 = 1;//2291;
 			if (startType <= t1 && t1 < endType)
-				cudaMemcpy(vmTimeSerie[1],  hList[t1][n1].vmTimeSerie, timeSerieMemSize, cudaMemcpyDeviceToHost);
+				cudaMemcpy(vmTimeSerie[1],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 
 			t1 = 0; n1 = 2;//135;
 			if (startType <= t1 && t1 < endType)
-				cudaMemcpy(vmTimeSerie[2],  hList[t1][n1].vmTimeSerie, timeSerieMemSize, cudaMemcpyDeviceToHost);
+				cudaMemcpy(vmTimeSerie[2],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 
 			t1 = 0; n1 = 3;//1203;
 			if (startType <= t1 && t1 < endType)
-				cudaMemcpy(vmTimeSerie[3],  hList[t1][n1].vmTimeSerie, timeSerieMemSize, cudaMemcpyDeviceToHost);
+				cudaMemcpy(vmTimeSerie[3],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 			checkCUDAError("Results obtaining:");
 
 			for (int i = kStep; threadNumber == 0 && i < kStep + kernelSteps; i++) {
@@ -1029,8 +1065,8 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int start
 	}
 
 	if (threadNumber == 0) {
-		printf("%10.2f\t%10.5f\t%10.5f\n", dt * nSteps, (vmTimeSerie[0])[nComp0*kernelSteps-1], (vmTimeSerie[0])[kernelSteps-1]);
-		printf("%10.2f\t%10.5f\t%10.5f\n", dt * nSteps, (vmTimeSerie[1])[nComp0*kernelSteps-1], (vmTimeSerie[1])[kernelSteps-1]);
+		printf("%10.2f\t%10.5f\t%10.5f\n", dt * nSteps, (vmTimeSerie[0])[nCompVmTimeSerie*kernelSteps-1], (vmTimeSerie[0])[kernelSteps-1]);
+		printf("%10.2f\t%10.5f\t%10.5f\n", dt * nSteps, (vmTimeSerie[1])[nCompVmTimeSerie*kernelSteps-1], (vmTimeSerie[1])[kernelSteps-1]);
 	}
 
 	// Used to print spike statistics in the end of the simulation

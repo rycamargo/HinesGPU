@@ -9,6 +9,8 @@
 #include <cstdio>
 #include <cassert>
 
+#include <cuda.h> // Necessary to allow better eclipse integration
+#include <cuda_runtime_api.h> // Necessary to allow better eclipse integration
 #include <device_launch_parameters.h> // Necessary to allow better eclipse integration
 #include <device_functions.h> // Necessary to allow better eclipse integration
 

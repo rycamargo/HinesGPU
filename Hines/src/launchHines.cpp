@@ -49,21 +49,15 @@
 #include "HinesStruct.hpp"
 #include "SpikeStatistics.hpp"
 
+#ifdef MPI_GPU_NN
+#include <mpi.h>
+#endif
+
 using namespace std;
-
-struct ThreadInfo {
-	SharedNeuronGpuData *sharedData;
-	int *nNeurons;
-	int *nComp;
-
-	int totalTypes;
-	int nThreadsCpu;
-};
-
 
 // Defined in HinesGpu.cu
 //extern "C" {
-extern int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int startType, int endType, int totalTypes, int threadNumber);
+extern int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo);
 //int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int startType, int endType, int totalTypes, int threadNumber){return 0;}
 //}
 //int launchGpuExecution(HinesMatrix *matrixList, int nNeurons){}
@@ -71,14 +65,13 @@ extern int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, in
 void *launchDeviceExecution(void *ptr) {
 
 	ThreadInfo *tInfo = (ThreadInfo *)ptr;
-	int totalTypes 	= tInfo->totalTypes;
 	SharedNeuronGpuData *sharedData = tInfo->sharedData;
 
 	/**
 	 * Define the thread numbers
 	 */
 	pthread_mutex_lock (sharedData->mutex);
-	int threadNumber = sharedData->nBarrier;
+	tInfo->threadNumber = sharedData->nBarrier;
 	sharedData->nBarrier++;
 	if (sharedData->nBarrier < sharedData->nThreadsCpu)
 		pthread_cond_wait(sharedData->cond, sharedData->mutex);
@@ -88,18 +81,19 @@ void *launchDeviceExecution(void *ptr) {
 	}
 	pthread_mutex_unlock (sharedData->mutex);
 
-	printf ("threadNumber = %d | nBarrier = %d \n", threadNumber, tInfo->sharedData->nBarrier);
-
 	char *randstate = new char[256];
 	//tInfo->sharedData->randBuf[threadNumber] = new random_data;
-	tInfo->sharedData->randBuf[threadNumber] = (struct random_data*)calloc(1, sizeof(struct random_data));
-	initstate_r(tInfo->sharedData->globalSeed + threadNumber,
-			randstate, 256, tInfo->sharedData->randBuf[threadNumber]);
+	tInfo->sharedData->randBuf[tInfo->threadNumber] = (struct random_data*)calloc(1, sizeof(struct random_data));
+	initstate_r(tInfo->sharedData->globalSeed + tInfo->threadNumber + tInfo->currProcess,
+			randstate, 256, tInfo->sharedData->randBuf[tInfo->threadNumber]);
 
-	int startType = threadNumber * (totalTypes / tInfo->nThreadsCpu);
-	int endType   = (threadNumber+1) * (totalTypes / tInfo->nThreadsCpu);
+	int nTypesPerThread = (tInfo->totalTypes / (tInfo->nThreadsCpu * tInfo->nProcesses));
+	tInfo->startType = (tInfo->threadNumber + (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
+	tInfo->endType   = (tInfo->threadNumber + 1 + (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
 
-	for (int type = startType; type < endType; type++) {
+	printf ("process = %d | threadNumber = %d | types [%d|%d] \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startType, tInfo->endType);
+
+	for (int type = tInfo->startType; type < tInfo->endType; type++) {
 
 		int nComp 	 = tInfo->nComp[type];
 		int nNeurons = tInfo->nNeurons[type];
@@ -146,7 +140,7 @@ void *launchDeviceExecution(void *ptr) {
 	/**
 	 * Launches the execution of all threads
 	 */
-	launchGpuExecution(sharedData, tInfo->nNeurons, startType, endType, totalTypes, threadNumber);
+	launchGpuExecution(sharedData, tInfo);
 
 //	for (int type = 0; type < totalTypes; type++)
 //		delete[] sharedData->matrixList[type];
@@ -242,7 +236,7 @@ void *launchHostExecution(void *ptr) {
 	if (threadNumber == 0) {
 		sharedData->connection = new Connections();
 		sharedData->connection->connectRandom (sharedData->pyrConnRatio, sharedData->inhConnRatio,
-				sharedData->typeList, totalTypes, tInfo->nNeurons, tInfo->sharedData, threadNumber);
+				sharedData->typeList, 0, totalTypes, totalTypes, tInfo->nNeurons, tInfo->sharedData, threadNumber);
 	}
 
 	pthread_mutex_lock (sharedData->mutex);
@@ -505,8 +499,50 @@ void *launchHostExecution(void *ptr) {
 	return 0;
 }
 
+ThreadInfo *createInfoArray(int nThreads, ThreadInfo *model){
+	ThreadInfo *tInfoArray = new ThreadInfo[nThreads];
+	for (int i=0; i<nThreads; i++) {
+		tInfoArray[i].sharedData 	= model->sharedData;
+		tInfoArray[i].nNeurons		= model->nNeurons;
+		tInfoArray[i].nComp			= model->nComp;
+
+		tInfoArray[i].totalTypes		= model->totalTypes;
+		tInfoArray[i].totalTypesProcess	= model->totalTypesProcess;
+
+		tInfoArray[i].currProcess	= model->currProcess;
+
+		tInfoArray[i].nProcesses	= model->nProcesses;
+		tInfoArray[i].nThreadsCpu	= model->nThreadsCpu;
+
+		tInfoArray[i].startType		= model->startType;
+		tInfoArray[i].endType		= model->endType;
+		tInfoArray[i].threadNumber	= model->threadNumber;
+	}
+
+	return tInfoArray;
+}
+
 // uA, kOhm, mV, cm, uF
 int main(int argc, char **argv) {
+
+	int nProcesses = 1;
+    int currentProcess=0;
+#ifdef MPI_GPU_NN
+    MPI_Status status;
+    int threadLevel;
+    //MPI_Init (&argc, &argv);
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE , &threadLevel);
+    MPI_Comm_rank (MPI_COMM_WORLD, &currentProcess);
+    MPI_Comm_size (MPI_COMM_WORLD, &nProcesses);
+    if (threadLevel == MPI_THREAD_SINGLE)
+    	printf("MPI support enabled with %d processes and MPI_THREAD_SINGLE.\n", nProcesses);
+    else if (threadLevel == MPI_THREAD_FUNNELED)
+    	printf("MPI support enabled with %d processes and MPI_THREAD_FUNNELED.\n", nProcesses);
+    else if (threadLevel == MPI_THREAD_SERIALIZED)
+    	printf("MPI support enabled with %d processes and MPI_THREAD_SERIALIZED.\n", nProcesses);
+    else if (threadLevel == MPI_THREAD_MULTIPLE)
+    	printf("MPI support enabled with %d processes and MPI_THREAD_MULTIPLE.\n", nProcesses);
+#endif
 
 	bench.start = gettimeInMilli();
 
@@ -528,9 +564,12 @@ int main(int argc, char **argv) {
 	tInfo->sharedData = new SharedNeuronGpuData;
 	tInfo->sharedData->nKernelSteps = 100;
 
-	tInfo->nThreadsCpu = nThreads;
+	tInfo->nThreadsCpu 	= nThreads;
+	tInfo->nProcesses 	= nProcesses;
+	tInfo->totalTypesProcess = 2*nThreads;
+	tInfo->totalTypes = tInfo->totalTypesProcess * nProcesses;
 
-	tInfo->totalTypes = 2*nThreads;//8;
+	tInfo->currProcess = currentProcess;
 
 	tInfo->nNeurons = new int[tInfo->totalTypes];
 	tInfo->nComp    = new int[tInfo->totalTypes];
@@ -552,12 +591,12 @@ int main(int argc, char **argv) {
 	pthread_cond_init (  tInfo->sharedData->cond, NULL );
 	pthread_mutex_init( tInfo->sharedData->mutex, NULL );
 
-	tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypes];
+	tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypesProcess];
 	tInfo->sharedData->synData = 0;
 	tInfo->sharedData->hGpu = 0;
 	tInfo->sharedData->hList = 0;
 	tInfo->sharedData->nThreadsCpu = tInfo->nThreadsCpu;
-	tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList);
+	tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList); // TODO: [MPI] must consider the first and last processes
 	tInfo->sharedData->randBuf = new random_data *[tInfo->nThreadsCpu];
 
 	tInfo->sharedData->inputSpikeRate = 0.1;
@@ -741,13 +780,14 @@ int main(int argc, char **argv) {
 	}
 
 	pthread_t *thread1 = new pthread_t[nThreads];
+	ThreadInfo *tInfoArray = createInfoArray(nThreads, tInfo);
 	for (int t=0; t<nThreads; t++) {
 
 			if (mode == 'C' || mode == 'B')
-				pthread_create ( &thread1[t], NULL, launchHostExecution, tInfo);
+				pthread_create ( &thread1[t], NULL, launchHostExecution, &(tInfoArray[t]));
 
 			if (mode == 'G' || mode == 'H' || mode == 'B')
-				pthread_create ( &thread1[t], NULL, launchDeviceExecution, tInfo);
+				pthread_create ( &thread1[t], NULL, launchDeviceExecution, &(tInfoArray[t]));
 
 			//pthread_detach(thread1[t]);
 	}
@@ -784,8 +824,13 @@ int main(int argc, char **argv) {
 	delete[] tInfo->nNeurons;
 	delete[] tInfo->nComp;
 	delete tInfo;
+	delete[] tInfoArray;
 
 	printf ("Finished Simulation!!!\n");
+
+#ifdef MPI_GPU_NN
+    MPI_Finalize();
+#endif
 
 	return 0;
 }

@@ -8,11 +8,28 @@
 #ifndef DEFINITIONS_HPP_
 #define DEFINITIONS_HPP_
 
+#define MPI_GPU_NN
+
 //#include <time.h>
 #include <stdlib.h>
 
 #define PI 3.14159
-typedef float ftype;
+
+#define GEN_SPIKE_TIME_LIST_SIZE_PER_NEURON 5
+
+#define FTYPE_FLOAT
+//#define FTYPE_DOUBLE
+
+#if defined(FTYPE_FLOAT)
+	typedef float ftype;
+	#define MPI_FTYPE MPI_FLOAT
+	#define MPI_UCOMP MPI_UNSIGNED_SHORT
+#elif defined(FTYPE_DOUBLE)
+	typedef double ftype;
+	#define MPI_FTYPE MPI_DOUBLE
+	#define MPI_UCOMP MPI_UNSIGNED_SHORT
+#endif
+
 //typedef double ftype;
 
 #if defined(_MSC_VER) || defined(_MSC_EXTENSIONS)

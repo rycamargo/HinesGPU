@@ -17,7 +17,7 @@ HinesMatrix::HinesMatrix() {
 	triangAll = 0;
 
 	lastSpike = -1000;
-	spikeTimeListSize = 5;
+	spikeTimeListSize = GEN_SPIKE_TIME_LIST_SIZE_PER_NEURON;
 	spikeTimes = new ftype[spikeTimeListSize];
 	nGeneratedSpikes = 0;
 	threshold = 50;

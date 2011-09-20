@@ -16,8 +16,8 @@
 
 extern void checkCUDAError(const char *msg);
 
-// TODO: remove connections from Connections
-ConnGpu* createGpuConnections( Connections *conn, int destType, int nTypes, int *nNeurons, int nGroups ) {
+// TODO: remove connections from Connections NEW
+ConnGpu* createGpuConnections( MPIConnectionInfo *connInfo, int destType, int *nNeurons, int nGroups ) {
 
 	// Contains the structures with the connections for each neuron group
 	ConnGpu *connGpuTypeHost = (ConnGpu *)malloc(nGroups*sizeof(ConnGpu));
@@ -45,30 +45,23 @@ ConnGpu* createGpuConnections( Connections *conn, int destType, int nTypes, int 
 	 * Counts the total number of connections for the group
 	 */
 
-	for (int srcType=0; srcType < nTypes; srcType++) {
-		for (int neuron=0; neuron < nNeurons[srcType]; neuron++) {
+	for (int conn=0; conn < connInfo->nConnections; conn++) {
 
-			std::vector<Conn> & connList = conn->getConnArray(neuron + srcType*CONN_NEURON_TYPE);
-			for (int conn=0; conn<connList.size(); conn++) {
+		if (connInfo->dest[conn] / CONN_NEURON_TYPE == destType) {
 
-				if (connList[conn].dest / CONN_NEURON_TYPE == destType) {
-
-					int destNeuron = connList[conn].dest % CONN_NEURON_TYPE;
-					int group = destNeuron / nNeuronsPerGroup;
-					if (nNeurons[destType] % nGroups != 0) {
-						if (destNeuron < nNeuronsExtraGroups)
-							group = destNeuron / (nNeuronsPerGroup+1);
-						else
-							group = nGroupsExtraNeuron + ((destNeuron - nNeuronsExtraGroups) / nNeuronsPerGroup);
-					}
-
-					nConnectionsTotal[group]++;
-//					assert (destNeuron >= connGpuTypeHost[group].nNeuronsInPreviousGroups);
-//					assert (destNeuron < connGpuTypeHost[group].nNeuronsInPreviousGroups + connGpuTypeHost[group].nNeuronsGroup);
-				}
+			int destNeuron = connInfo->dest[conn] % CONN_NEURON_TYPE;
+			int group = destNeuron / nNeuronsPerGroup;
+			if (nNeurons[destType] % nGroups != 0) {
+				if (destNeuron < nNeuronsExtraGroups)
+					group = destNeuron / (nNeuronsPerGroup+1);
+				else
+					group = nGroupsExtraNeuron + ((destNeuron - nNeuronsExtraGroups) / nNeuronsPerGroup);
 			}
+			nConnectionsTotal[group]++;
 		}
 	}
+
+
 
 
 	for (int group=0; group<nGroups; group++) {
@@ -108,40 +101,32 @@ ConnGpu* createGpuConnections( Connections *conn, int destType, int nTypes, int 
 	for (int group=0; group<nGroups; group++)
 		memPosList[group] = 0;
 
-	for (int srcType=0; srcType < nTypes; srcType++) {
-		for (int neuron=0; neuron < nNeurons[srcType]; neuron++) {
 
-			std::vector<Conn> & connList = conn->getConnArray(neuron + srcType*CONN_NEURON_TYPE);
+	for (int conn=0; conn < connInfo->nConnections; conn++) {
 
-			for (int conn=0; conn<connList.size(); conn++) {
+		if (connInfo->dest[conn] / CONN_NEURON_TYPE == destType) {
 
-				if (connList[conn].dest / CONN_NEURON_TYPE == destType) {
-
-					Conn & connStr = connList[conn];
-
-					int destNeuron = connStr.dest % CONN_NEURON_TYPE;
-					int group = destNeuron / nNeuronsPerGroup;
-					if (nNeurons[destType] % nGroups != 0) {
-						if (destNeuron < nNeuronsExtraGroups)
-							group = destNeuron / (nNeuronsPerGroup+1);
-						else
-							group = nGroupsExtraNeuron + ((destNeuron - nNeuronsExtraGroups) / nNeuronsPerGroup);
-					}
-
-					ConnGpu & connGpu = connGpuTypeHost[group];
-					int memPos = memPosList[group];
-
-					connGpu.srcHost[memPos]		= neuron + srcType*CONN_NEURON_TYPE;
-					connGpu.destHost[memPos]	= connStr.dest;     // TODO: can move to another vector
-					connGpu.synapseHost[memPos]	= connStr.synapse;  // TODO: can move to another vector
-					connGpu.weightHost[memPos] 	= connStr.weigth;   // TODO: can move to another vector
-					connGpu.delayHost[memPos]	= connStr.delay;    // TODO: can move to another vector
-
-					memPosList[group]++;
-				}
-
+			int destNeuron = connInfo->dest[conn] % CONN_NEURON_TYPE;
+			int group = destNeuron / nNeuronsPerGroup;
+			if (nNeurons[destType] % nGroups != 0) {
+				if (destNeuron < nNeuronsExtraGroups)
+					group = destNeuron / (nNeuronsPerGroup+1);
+				else
+					group = nGroupsExtraNeuron + ((destNeuron - nNeuronsExtraGroups) / nNeuronsPerGroup);
 			}
+
+			ConnGpu & connGpu = connGpuTypeHost[group];
+			int memPos = memPosList[group];
+
+			connGpu.srcHost    [memPos] = connInfo->source [conn];
+			connGpu.destHost   [memPos]	= connInfo->dest   [conn];  // TODO: can move to another vector
+			connGpu.synapseHost[memPos]	= connInfo->synapse[conn];  // TODO: can move to another vector
+			connGpu.weightHost [memPos] = connInfo->weigth [conn];  // TODO: can move to another vector
+			connGpu.delayHost  [memPos]	= connInfo->delay  [conn];  // TODO: can move to another vector
+
+			memPosList[group]++;
 		}
+
 	}
 
 	/**
@@ -160,6 +145,12 @@ ConnGpu* createGpuConnections( Connections *conn, int destType, int nTypes, int 
 
 		checkCUDAError("Memcopy error at [SynapticComm.cu]:");
 	}
+
+	int nConnectionsAllGroups = 0;
+	for (int group=0; group<nGroups; group++)
+		nConnectionsAllGroups += connGpuTypeHost[group].nConnectionsTotal;
+	printf ("Number of connections to type %d is %d (%dk).\n", destType, nConnectionsAllGroups, nConnectionsAllGroups/1000);
+
 
 	return connGpuTypeHost;
 }

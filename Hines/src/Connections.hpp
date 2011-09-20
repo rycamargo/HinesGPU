@@ -57,6 +57,16 @@ struct Conn {
 	ftype delay;
 };
 
+struct MPIConnectionInfo{
+	int *source;
+	int *dest;
+	ucomp *synapse;
+	ftype *weigth;
+	ftype *delay;
+	int nConnections;
+
+};
+
 class Connections {
 public:
 
@@ -70,8 +80,11 @@ public:
 	Connections();
 	virtual ~Connections();
 
+	MPIConnectionInfo *getMPIConnections ();
+	void clearMPIConnections(MPIConnectionInfo *connInfo);
+
 	int connectAssociativeFromFile (char *filename);
-	int connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, int nTypes, int *nNeurons, SharedNeuronGpuData *sharedData, int threadNumber);
+	int connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, int startType, int endType, int totalTypes, int *nNeurons, SharedNeuronGpuData *sharedData, int threadNumber);
 	int createTestConnections ();
 };
 

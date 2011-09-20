@@ -22,6 +22,54 @@ std::vector<Conn> & Connections::getConnArray (int source) {
 	return connMap[source];
 }
 
+void Connections::clearMPIConnections (MPIConnectionInfo *connInfo) {
+
+	delete []connInfo->source;
+	delete []connInfo->dest;
+	delete []connInfo->synapse;
+	delete []connInfo->weigth;
+	delete []connInfo->delay;
+
+	delete connInfo;
+}
+
+MPIConnectionInfo *Connections::getMPIConnections () {
+
+	int countTotal = 0;
+	MPIConnectionInfo *connInfo = new MPIConnectionInfo;
+
+	// Counts the total number of connections
+	map< int, std::vector<Conn> >::iterator p;
+	for(p = connMap.begin(); p != connMap.end(); p++)
+		countTotal += p->second.size();
+
+	connInfo->nConnections = countTotal;
+	connInfo->source  = new int[countTotal];
+	connInfo->dest 	 = new int[countTotal];
+	connInfo->synapse = new ucomp[countTotal];
+	connInfo->weigth  = new ftype[countTotal];
+	connInfo->delay   = new ftype[countTotal];
+
+	int infoPos = 0;
+	for(p = connMap.begin(); p != connMap.end(); p++) {
+
+		int source = p->first;
+		std::vector<Conn> & conn = p->second;
+
+		std::vector<Conn>::iterator p;
+		for(p = conn.begin(); p != conn.end(); p++) {
+			connInfo->source [infoPos] = source;
+			connInfo->dest   [infoPos] = (*p).dest;
+			connInfo->synapse[infoPos] = (*p).synapse;
+			connInfo->weigth [infoPos] = (*p).weigth;
+			connInfo->delay  [infoPos] = (*p).delay;
+			infoPos++;
+		}
+	}
+
+	return connInfo;
+}
+
 int Connections::createTestConnections () {
 
 	int source;
@@ -66,13 +114,13 @@ void generateRandomList(int nNumbers, int *randomNumberList, random_data *randBu
 		random_r( randBuf, &randomNumberList[i] );
 }
 
-int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, int nTypes, int *nNeurons, SharedNeuronGpuData *sharedData, int threadNumber) {
+int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, int startTypeProc, int endTypeProc, int totalTypes, int *nNeurons, SharedNeuronGpuData *sharedData, int threadNumber) {
 
 	int nConnTotal = 0;
 
 	int nPyramidal  = 0;
 	int nInhibitory = 0;
-	for (int type=0; type < nTypes; type++) {
+	for (int type=0; type < totalTypes; type++) {
 		if (typeList[type] == PYRAMIDAL_CELL)
 			nPyramidal += nNeurons[type];
 		else if (typeList[type] == INHIBITORY_CELL)
@@ -89,7 +137,7 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 	 */
 	int *randomConnectionList = (int *)malloc( sizeof(int) * (nPyramidal + 1) );
 
-	for (int sType=0; sType < nTypes; sType++) {
+	for (int sType=startTypeProc; sType < endTypeProc; sType++) {
 
 		if (typeList[sType] == INHIBITORY_CELL) continue;
 
@@ -130,14 +178,9 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 
 				assert (0 <= conn1.dest && conn1.dest < nPyramidal);
 
-				//------------
-//				int32_t pos;
-//				random_r( sharedData->randBuf[threadNumber], &pos );
-//				conn1.dest = pos % nPyramidal;
-				//------------
 
 				int count = 0;
-				for (int dType=0; dType < nTypes; dType++) {
+				for (int dType=0; dType < totalTypes; dType++) {
 
 					if (typeList[dType] == INHIBITORY_CELL) continue;
 
@@ -160,7 +203,7 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 	 * Connects the pyramidal-inhibitory cells
 	 */
 	randomConnectionList = (int *)malloc( sizeof(int) * (nInhibitory + 1) );
-	for (int sType=0; sType < nTypes; sType++) {
+	for (int sType=startTypeProc; sType < endTypeProc; sType++) {
 
 		if (typeList[sType] == INHIBITORY_CELL) continue;
 
@@ -207,7 +250,7 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 				//------------
 
 				int count = 0;
-				for (int dType=0; dType < nTypes; dType++) {
+				for (int dType=0; dType < totalTypes; dType++) {
 
 					if (typeList[dType] == PYRAMIDAL_CELL) continue;
 
@@ -233,7 +276,7 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 	 */
 	int inhNeuron = 0;
 	if (inhRatio > 0) {
-		for (int sType=0; sType < nTypes; sType++) {
+		for (int sType=startTypeProc; sType < endTypeProc; sType++) {
 
 			if (typeList[sType] == PYRAMIDAL_CELL) continue;
 
@@ -254,7 +297,7 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 
 				conn1.dest = inhNeuron;
 				int count = 0;
-				for (int dType=0; dType < nTypes; dType++) {
+				for (int dType=0; dType < totalTypes; dType++) {
 
 					if (typeList[dType] == INHIBITORY_CELL) continue;
 

@@ -10,7 +10,7 @@
 
 #include <cstdio>
 
-SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList) {
+SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int startTypeProcess, int endTypeProcess) {
 
 	this->typeList = typeList;
 	this->nNeurons = nNeurons;
@@ -35,7 +35,8 @@ SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList) {
 	totalNeurons = 0;
 	pyrNeurons = 0;
 	inhNeurons = 0;
-	for (int type=0; type<nTypes; type++) {
+	for (int type=startTypeProcess; type<endTypeProcess; type++) {
+
 		totalNeurons += nNeurons[type];
 		if (typeList[type] == PYRAMIDAL_CELL)
 			pyrNeurons += nNeurons[type];
@@ -78,7 +79,7 @@ void SpikeStatistics::printKernelSpikeStatistics(FILE *nSpkfile, FILE *lastSpkfi
 	fprintf(lastSpkfile, "\n");
 }
 
-void SpikeStatistics::printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench) {
+void SpikeStatistics::printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess) {
 
 //	ftype genSpikes = 0;
 //	ftype recSpikes = 0;
@@ -93,7 +94,7 @@ void SpikeStatistics::printSpikeStatistics(char *filename, ftype currentTime, Be
 	FILE *outFile = fopen(filename, "w");
 	fprintf(outFile, "# totalTime=%f, totalNeurons=%d, nTypes=%d\n", currentTime, totalNeurons, nTypes);
 
-	for (int type=0; type<nTypes; type++) {
+	for (int type=startTypeProcess; type<endTypeProcess; type++) {
 		for (int neuron=0; neuron < nNeurons[type]; neuron++) {
 
 			bench.meanGenSpikes += totalGeneratedSpikes[type][neuron];

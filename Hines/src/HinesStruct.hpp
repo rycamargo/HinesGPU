@@ -211,15 +211,19 @@ typedef struct {
 
 	int totalTypes;
 	int totalTypesProcess;
-
-	int currProcess;
+	int *typeProcess; // The rank of the process assigned to that type
 
 	int nProcesses;
 	int nThreadsCpu;
 
-	int startType;
-	int endType;
+	int startTypeProcess;
+	int endTypeProcess;
+	int currProcess;
+
+	int startTypeThread;
+	int endTypeThread;
 	int threadNumber;
+
 } ThreadInfo;
 
 #endif

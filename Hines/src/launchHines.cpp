@@ -88,12 +88,29 @@ void *launchDeviceExecution(void *ptr) {
 			randstate, 256, tInfo->sharedData->randBuf[tInfo->threadNumber]);
 
 	int nTypesPerThread = (tInfo->totalTypes / (tInfo->nThreadsCpu * tInfo->nProcesses));
-	tInfo->startType = (tInfo->threadNumber + (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
-	tInfo->endType   = (tInfo->threadNumber + 1 + (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
+	tInfo->startTypeThread = (tInfo->threadNumber +     (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
+	tInfo->endTypeThread   = (tInfo->threadNumber + 1 + (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
 
-	printf ("process = %d | threadNumber = %d | types [%d|%d] \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startType, tInfo->endType);
+	tInfo->startTypeProcess =  tInfo->currProcess    * tInfo->nThreadsCpu * nTypesPerThread;
+	tInfo->endTypeProcess   = (tInfo->currProcess+1) * tInfo->nThreadsCpu * nTypesPerThread;
 
-	for (int type = tInfo->startType; type < tInfo->endType; type++) {
+	if (tInfo->threadNumber == 0)
+		tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList, tInfo->startTypeProcess, tInfo->endTypeProcess);
+
+	int typeProcessCurr = 0;
+	tInfo->typeProcess = new int[tInfo->totalTypes];
+	for (int type = 0; type < tInfo->totalTypes; type++) {
+		if (type / ((typeProcessCurr+1) * tInfo->nThreadsCpu * nTypesPerThread) == 1)
+			typeProcessCurr++;
+		tInfo->typeProcess[type] = typeProcessCurr;
+	}
+
+	printf ("process = %d | threadNumber = %d | types [%d|%d] \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread);
+
+	/**------------------------------------------------------------------------------------
+	 * Creates the neurons that will be simulated by the threads
+	 *-------------------------------------------------------------------------------------*/
+	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
 
 		int nComp 	 = tInfo->nComp[type];
 		int nNeurons = tInfo->nNeurons[type];
@@ -121,6 +138,8 @@ void *launchDeviceExecution(void *ptr) {
 
 	//printf ("thread %d Sync \n", threadNumber);
 
+	//printf ("thread %d process %d Prepare Sync \n", tInfo->threadNumber, tInfo->currProcess);
+
 	/**
 	 * Synchronize threads before starting
 	 */
@@ -134,7 +153,7 @@ void *launchDeviceExecution(void *ptr) {
 	}
 	pthread_mutex_unlock (sharedData->mutex);
 
-	//printf ("thread %d OK \n", threadNumber);
+	//printf ("thread %d process %d OK \n", tInfo->threadNumber, tInfo->currProcess);
 
 
 	/**
@@ -189,6 +208,8 @@ void *launchHostExecution(void *ptr) {
 	int startType = threadNumber * (totalTypes / tInfo->nThreadsCpu);
 	int endType   = (threadNumber+1) * (totalTypes / tInfo->nThreadsCpu);
 
+	if (tInfo->threadNumber == 0)
+		tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList, startType, endType);
 	//printf("Creating matrices for %d neurons and %d comparts.\n", nNeurons, nComp);
 	//HinesMatrix *mList = new HinesMatrix[nNeurons];
 
@@ -485,7 +506,7 @@ void *launchHostExecution(void *ptr) {
 
 	// Used to print spike statistics in the end of the simulation
 	if (threadNumber == 0)
-		sharedData->spkStat->printSpikeStatistics((char *)"spikeCpu.dat", totalTime, bench);
+		sharedData->spkStat->printSpikeStatistics((char *)"spikeCpu.dat", totalTime, bench, startType, endType);
 
 	//bench.execPrepare  = gettimeInMilli();
 	//bench.execPrepareF = (bench.execPrepare - bench.matrixSetup)/1000.;
@@ -514,9 +535,9 @@ ThreadInfo *createInfoArray(int nThreads, ThreadInfo *model){
 		tInfoArray[i].nProcesses	= model->nProcesses;
 		tInfoArray[i].nThreadsCpu	= model->nThreadsCpu;
 
-		tInfoArray[i].startType		= model->startType;
-		tInfoArray[i].endType		= model->endType;
-		tInfoArray[i].threadNumber	= model->threadNumber;
+		tInfoArray[i].startTypeThread	= model->startTypeThread;
+		tInfoArray[i].endTypeThread		= model->endTypeThread;
+		tInfoArray[i].threadNumber		= model->threadNumber;
 	}
 
 	return tInfoArray;
@@ -596,7 +617,6 @@ int main(int argc, char **argv) {
 	tInfo->sharedData->hGpu = 0;
 	tInfo->sharedData->hList = 0;
 	tInfo->sharedData->nThreadsCpu = tInfo->nThreadsCpu;
-	tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList); // TODO: [MPI] must consider the first and last processes
 	tInfo->sharedData->randBuf = new random_data *[tInfo->nThreadsCpu];
 
 	tInfo->sharedData->inputSpikeRate = 0.1;

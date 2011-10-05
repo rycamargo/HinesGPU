@@ -27,14 +27,14 @@ class SpikeStatistics {
 	ftype **lastGeneratedSpikeTimes;
 
 public:
-	SpikeStatistics(int *nNeurons, int nTypes, int *typeList);
+	SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int startTypeProcess, int endTypeProcess);
 	virtual ~SpikeStatistics();
 
 	void addGeneratedSpikes(int type, int neuron, ftype *spikeTimes, int nSpikes);
 
 	void addReceivedSpikes(int type, int neuron, int nReceivedSpikes);
 
-	void printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench);
+	void printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess);
 
 	void printKernelSpikeStatistics(FILE *nSpkfile, FILE *lastSpkfile, ftype currentTime);
 };

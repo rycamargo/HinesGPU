@@ -14,6 +14,9 @@
 #include <device_launch_parameters.h> // Necessary to allow better eclipse integration
 #include <device_functions.h> // Necessary to allow better eclipse integration
 
+// Put here so that eclipse will not see this function as an error in the code
+extern void __syncthreads(void);
+
 extern void checkCUDAError(const char *msg);
 
 // TODO: remove connections from Connections NEW

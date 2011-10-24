@@ -5,6 +5,8 @@
 #include "SpikeStatistics.hpp"
 #include <cassert>
 #include <cstdlib>
+#include <cstdio>
+#include <cstring>
 #include <pthread.h>
 
 #ifdef MPI_GPU_NN
@@ -396,10 +398,15 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo) {
 	/*--------------------------------------------------------------
 	 * Used to obtain the Vm of neurons and write to files
 	 *--------------------------------------------------------------*/
+	char buf[20];
+
 	FILE *outFile;
-	outFile = fopen("sampleVm.dat", "w");
+	sprintf(buf, "%s%d%s", "sampleVm", tInfo->currProcess, ".dat");
+	outFile = fopen( buf, "w");
+
 	FILE *vmKernelFile;
-	vmKernelFile = fopen("vmKernel.dat", "w");
+	sprintf(buf, "%s%d%s", "vmKernel", tInfo->currProcess, ".dat");
+	vmKernelFile = fopen( buf, "w");
 
 	int nVmTimeSeries = 4;
 	ftype **vmTimeSerie  = (ftype **)malloc(sizeof(ftype *) * nVmTimeSeries);
@@ -609,6 +616,12 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo) {
 		bench.execPrepareF = (bench.execPrepare - bench.matrixSetup)/1000.;
 	}
 
+	// Used only for debugging
+	long *nSpikesTotal = (long *)malloc(tInfo->totalTypes * sizeof(long));
+	for (int type=0; type < tInfo->totalTypes; type++) {
+		nSpikesTotal[type] = 0;
+	}
+
 	/*--------------------------------------------------------------
 	 * Solves the matrix for n steps
 	 *--------------------------------------------------------------*/
@@ -741,7 +754,19 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo) {
 				MPI_Bcast (synData->genSpikeTimeListHost[type], genSpikeListTypeSize, MPI_FTYPE, tInfo->typeProcess[type], MPI_COMM_WORLD);
 				MPI_Bcast (synData->nGeneratedSpikesHost[type], nNeurons[type],       MPI_UCOMP, tInfo->typeProcess[type], MPI_COMM_WORLD);
 			}
+
+
+			if (kStep % 100 == 0) {
+				for (int type=0; type < tInfo->totalTypes; type++) {
+					long nTotal = 0;
+					for (int c=0; c<nNeurons[type]; c++)
+						nTotal += synData->nGeneratedSpikesHost[type][c];
+					nSpikesTotal[type] += nTotal;
+					printf("nSpikes=%5ld|%7ld for type %d\n", nTotal, nSpikesTotal[type], type);
+				}
+			}
 		}
+
 
 		/*--------------------------------------------------------------
 		 * Synchronize threads after communication
@@ -1118,31 +1143,31 @@ int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo) {
 				(benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE || benchConf.gpuCommMode == CPU_COMM) )
 			bench.connWrite = gettimeInMilli();
 
-		if (benchConf.printSampleVms == 1) {
+		if (threadNumber == 0 && benchConf.printSampleVms == 1) {
 			if (benchConf.verbose == 1)
 				printf("Writing Sample Vms thread=%d\n", threadNumber);
 
-			int t1 = 0, n1 = 0;
+			int t1 = startTypeThread, n1 = 0;
 			if (startTypeThread <= t1 && t1 < endTypeThread)
 				cudaMemcpy(vmTimeSerie[0],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 
-			t1 = 0; n1 = 1;//2291;
+			t1 = startTypeThread; n1 = 1;//2291;
 			if (startTypeThread <= t1 && t1 < endTypeThread)
 				cudaMemcpy(vmTimeSerie[1],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 
-			t1 = 0; n1 = 2;//135;
+			t1 = endTypeThread-1; n1 = 2;//135;
 			if (startTypeThread <= t1 && t1 < endTypeThread)
 				cudaMemcpy(vmTimeSerie[2],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 
-			t1 = 0; n1 = 3;//1203;
+			t1 = endTypeThread-1; n1 = 3;//1203;
 			if (startTypeThread <= t1 && t1 < endTypeThread)
 				cudaMemcpy(vmTimeSerie[3],  hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
 			checkCUDAError("Results obtaining:");
 
-			for (int i = kStep; threadNumber == 0 && i < kStep + kernelSteps; i++) {
-				fprintf(outFile, "%10.2f\t%10.2f\t%10.2f\t%10.2f\t%10.2f\n", dt * (i+1),
-						vmTimeSerie[0][(i-kStep)], vmTimeSerie[1][(i-kStep)], vmTimeSerie[2][(i-kStep)], vmTimeSerie[3][(i-kStep)]);
-			}
+//			for (int i = kStep; i < kStep + kernelSteps; i++) {
+//				fprintf(outFile, "%10.2f\t%10.2f\t%10.2f\t%10.2f\t%10.2f\n", dt * (i+1),
+//						vmTimeSerie[0][(i-kStep)], vmTimeSerie[1][(i-kStep)], vmTimeSerie[2][(i-kStep)], vmTimeSerie[3][(i-kStep)]);
+//			}
 		}
 
 		if (benchConf.printAllSpikeTimes == 1) {

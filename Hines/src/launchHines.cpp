@@ -717,7 +717,7 @@ int main(int argc, char **argv) {
 			if (simType[0] == 'n') benchConf.gpuCommBenchMode = GPU_COMM_SIMPLE;
 			else if (simType[0] == 'd') benchConf.gpuCommBenchMode = GPU_COMM_DETAILED;
 
-			tInfo->sharedData->totalTime   = 1000;
+			tInfo->sharedData->totalTime   = 500;
 			tInfo->sharedData->inputSpikeRate = 0.01;
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05

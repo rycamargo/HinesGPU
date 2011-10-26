@@ -235,6 +235,7 @@ __device__ void countReceivedSpikesG(int nNeurons, ConnGpu connGpuDev, int *nRec
 
 	/**
 	 * Here we consider nThreads == nNeuronsGroup;
+	 * Reduce data for synapse 0
 	 */
 	for (int i = 1; i < blockDim.x; i++) {
 
@@ -244,6 +245,10 @@ __device__ void countReceivedSpikesG(int nNeurons, ConnGpu connGpuDev, int *nRec
 		}
 	}
 
+	/**
+	 * Here we consider nThreads == nNeuronsGroup;
+	 * Reduce data for synapse 1
+	 */
 	if (threadIdx.x < connGpuDev.nNeuronsGroup)
 		nReceivedSpikesShared[connGpuDev.nNeuronsGroup + threadIdx.x] = 0;
 	for (int i = 0; i < blockDim.x; i++) {
@@ -496,7 +501,7 @@ __device__ void deliverGeneratedSpikesG(ConnGpu connGpuDev, int nNeurons, int *s
 // HinesStruct *hList, int nSteps, int nNeurons, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListStartGlobal, ftype *vmListGlobal
 __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
 		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
-		ftype *randomSpikeTimesDev, int *randomSpikeDestDev) {
+		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int *nReceivedSpikesGlobal0, int *nReceivedSpikesGlobal1) {
 
 
 	int group = blockIdx.x;
@@ -521,6 +526,21 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev, uc
 	 * Counts the number of spikes from other neurons and from a random source that will be added
 	 */
 	countReceivedSpikesG(nNeurons, connGpuDev, nReceivedSpikesShared, nGeneratedSpikesDev, randomSpikeDestDev);
+
+	/**
+	 * TODO: Remove Me [MPI]
+	 * Used only during debugging to check the number of received spikes per process
+	 */
+	__syncthreads();
+	if (threadIdx.x == 0) {
+		int nTmp0 = 0, nTmp1 = 0;
+		for (int i = 0; i < connGpuDev.nNeuronsGroup; i++) {
+			nTmp0 += nReceivedSpikesShared[i];
+			nTmp1 += nReceivedSpikesShared[i + connGpuDev.nNeuronsGroup];
+		}
+		nReceivedSpikesGlobal0[group] = nTmp0;
+		nReceivedSpikesGlobal1[group] = nTmp1;
+	}
 
 	/**
 	 * Counts the number of current spikes in spikeList to keep for the next kernel call

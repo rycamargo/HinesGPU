@@ -273,8 +273,14 @@ int Connections::connectRandom (ftype pyrRatio, ftype inhRatio, int *typeList, i
 
 	/**
 	 * Connects the inhibitory-pyramidal cells
+	 * Each pyramidal cell connects to a single inhibitory neuron
 	 */
+	// Checks the number of inhibitory neurons in the previous processes
 	int inhNeuron = 0;
+	for (int sType=0; sType < startTypeProc; sType++)
+		if (typeList[sType] == INHIBITORY_CELL)
+			inhNeuron += nNeurons[sType];
+
 	if (inhRatio > 0) {
 		for (int sType=startTypeProc; sType < endTypeProc; sType++) {
 

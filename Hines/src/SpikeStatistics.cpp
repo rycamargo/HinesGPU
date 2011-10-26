@@ -52,7 +52,10 @@ SpikeStatistics::~SpikeStatistics() {
 
 void SpikeStatistics::addGeneratedSpikes(int type, int neuron, ftype *spikeTimes, int nSpikes) {
 	totalGeneratedSpikes[type][neuron] += nSpikes;
-	lastGeneratedSpikeTimes[type][neuron] = spikeTimes[nSpikes-1];
+	if (spikeTimes != NULL)
+		lastGeneratedSpikeTimes[type][neuron] = spikeTimes[nSpikes-1];
+	else
+		lastGeneratedSpikeTimes[type][neuron] = 0.00;
 }
 
 void SpikeStatistics::addReceivedSpikes(int type, int neuron, int nReceivedSpikes) {
@@ -67,7 +70,7 @@ void SpikeStatistics::printKernelSpikeStatistics(FILE *nSpkfile, FILE *lastSpkfi
 
 		for (int neuron=0; neuron < nNeurons[type]; neuron++) {
 
-			fprintf(nSpkfile, 	 "%d ", totalGeneratedSpikes[type][neuron]);
+			fprintf(nSpkfile, 	 "%10.1f ", totalGeneratedSpikes[type][neuron]);
 			fprintf(lastSpkfile, "%10.2f ", lastGeneratedSpikeTimes[type][neuron]);
 		}
 

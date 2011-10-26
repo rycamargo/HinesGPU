@@ -151,7 +151,7 @@ typedef struct {
 	/**
 	 * List of generated spikes from the thread types
 	 */
-	ftype **genSpikeTimeListHost;
+	ftype **genSpikeTimeListHost;	// [All types in MPI version]
 	ftype **genSpikeTimeListDevice;
 
 	/**
@@ -167,7 +167,7 @@ typedef struct {
 } SynapticData;
 
 typedef struct {
-	HinesMatrix **matrixList;
+	HinesMatrix **matrixList;	// Only exists for the types of the MPI process
 	HinesStruct **hList;
 	SynapticData *synData;
 	HinesStruct **hGpu;

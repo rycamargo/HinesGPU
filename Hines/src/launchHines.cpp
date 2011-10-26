@@ -105,7 +105,7 @@ void *launchDeviceExecution(void *ptr) {
 		tInfo->typeProcess[type] = typeProcessCurr;
 	}
 
-	printf ("process = %d | threadNumber = %d | types [%d|%d] \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread);
+	printf ("process = %d | threadNumber = %d | types [%d|%d] | seed=%d \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread, tInfo->sharedData->globalSeed);
 
 	/**------------------------------------------------------------------------------------
 	 * Creates the neurons that will be simulated by the threads
@@ -115,7 +115,7 @@ void *launchDeviceExecution(void *ptr) {
 		int nComp 	 = tInfo->nComp[type];
 		int nNeurons = tInfo->nNeurons[type];
 
-		printf("nComp=%d nNeurons=%d seed=%d\n", nComp, nNeurons, tInfo->sharedData->globalSeed);
+		//printf("process = %d | threadNumber = %d | type = %d nComp=%d nNeurons=%d seed=%d\n", tInfo->currProcess, tInfo->threadNumber, type, nComp, nNeurons, tInfo->sharedData->globalSeed);
 
 		sharedData->matrixList[type] = new HinesMatrix[nNeurons];
 
@@ -131,6 +131,7 @@ void *launchDeviceExecution(void *ptr) {
 
 			m.createTestMatrix();
 		}
+
 	}
 
 	bench.matrixSetup  = gettimeInMilli();
@@ -152,8 +153,6 @@ void *launchDeviceExecution(void *ptr) {
 		pthread_cond_broadcast(sharedData->cond);
 	}
 	pthread_mutex_unlock (sharedData->mutex);
-
-	//printf ("thread %d process %d OK \n", tInfo->threadNumber, tInfo->currProcess);
 
 
 	/**
@@ -552,7 +551,7 @@ int main(int argc, char **argv) {
     MPI_Status status;
     int threadLevel;
     //MPI_Init (&argc, &argv);
-    MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE , &threadLevel);
+    MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED , &threadLevel);
     MPI_Comm_rank (MPI_COMM_WORLD, &currentProcess);
     MPI_Comm_size (MPI_COMM_WORLD, &nProcesses);
     if (threadLevel == MPI_THREAD_SINGLE)
@@ -612,7 +611,7 @@ int main(int argc, char **argv) {
 	pthread_cond_init (  tInfo->sharedData->cond, NULL );
 	pthread_mutex_init( tInfo->sharedData->mutex, NULL );
 
-	tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypesProcess];
+	tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypes];
 	tInfo->sharedData->synData = 0;
 	tInfo->sharedData->hGpu = 0;
 	tInfo->sharedData->hList = 0;

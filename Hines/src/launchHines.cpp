@@ -48,6 +48,7 @@
 #include "PlatformFunctions.hpp"
 #include "HinesStruct.hpp"
 #include "SpikeStatistics.hpp"
+#include "GpuSimulationController.hpp"
 
 #ifdef MPI_GPU_NN
 #include <mpi.h>
@@ -57,14 +58,15 @@ using namespace std;
 
 // Defined in HinesGpu.cu
 //extern "C" {
-extern int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo);
+//extern int launchGpuExecution(SharedNeuronGpuData *sharedData, ThreadInfo *tInfo);
 //int launchGpuExecution(SharedNeuronGpuData *sharedData, int *nNeurons, int startType, int endType, int totalTypes, int threadNumber){return 0;}
 //}
 //int launchGpuExecution(HinesMatrix *matrixList, int nNeurons){}
 
-void *launchDeviceExecution(void *ptr) {
 
-	ThreadInfo *tInfo = (ThreadInfo *)ptr;
+void *launchDeviceExecution(void *threadInfo) {
+
+	ThreadInfo *tInfo = (ThreadInfo *)threadInfo;
 	SharedNeuronGpuData *sharedData = tInfo->sharedData;
 
 	/**
@@ -82,88 +84,16 @@ void *launchDeviceExecution(void *ptr) {
 	pthread_mutex_unlock (sharedData->mutex);
 
 	char *randstate = new char[256];
-	//tInfo->sharedData->randBuf[threadNumber] = new random_data;
 	tInfo->sharedData->randBuf[tInfo->threadNumber] = (struct random_data*)calloc(1, sizeof(struct random_data));
 	initstate_r(tInfo->sharedData->globalSeed + tInfo->threadNumber + tInfo->currProcess,
 			randstate, 256, tInfo->sharedData->randBuf[tInfo->threadNumber]);
 
-	int nTypesPerThread = (tInfo->totalTypes / (tInfo->nThreadsCpu * tInfo->nProcesses));
-	tInfo->startTypeThread = (tInfo->threadNumber +     (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
-	tInfo->endTypeThread   = (tInfo->threadNumber + 1 + (tInfo->currProcess * tInfo->nThreadsCpu)) * nTypesPerThread;
-
-	tInfo->startTypeProcess =  tInfo->currProcess    * tInfo->nThreadsCpu * nTypesPerThread;
-	tInfo->endTypeProcess   = (tInfo->currProcess+1) * tInfo->nThreadsCpu * nTypesPerThread;
-
-	if (tInfo->threadNumber == 0)
-		tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList, tInfo->startTypeProcess, tInfo->endTypeProcess);
-
-	int typeProcessCurr = 0;
-	tInfo->typeProcess = new int[tInfo->totalTypes];
-	for (int type = 0; type < tInfo->totalTypes; type++) {
-		if (type / ((typeProcessCurr+1) * tInfo->nThreadsCpu * nTypesPerThread) == 1)
-			typeProcessCurr++;
-		tInfo->typeProcess[type] = typeProcessCurr;
-	}
-
-	printf ("process = %d | threadNumber = %d | types [%d|%d] | seed=%d \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread, tInfo->sharedData->globalSeed);
-
-	/**------------------------------------------------------------------------------------
-	 * Creates the neurons that will be simulated by the threads
-	 *-------------------------------------------------------------------------------------*/
-	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
-
-		int nComp 	 = tInfo->nComp[type];
-		int nNeurons = tInfo->nNeurons[type];
-
-		//printf("process = %d | threadNumber = %d | type = %d nComp=%d nNeurons=%d seed=%d\n", tInfo->currProcess, tInfo->threadNumber, type, nComp, nNeurons, tInfo->sharedData->globalSeed);
-
-		sharedData->matrixList[type] = new HinesMatrix[nNeurons];
-
-		//HinesMatrix *mList = mListPtr[0];
-
-		for (int n = 0; n < nNeurons; n++) {
-			HinesMatrix & m = sharedData->matrixList[type][n];
-
-			if (nComp == 1)
-				m.defineNeuronCableSquid();
-			else
-				m.defineNeuronTreeN(nComp, 1);
-
-			m.createTestMatrix();
-		}
-
-	}
-
-	bench.matrixSetup  = gettimeInMilli();
-	bench.matrixSetupF = (bench.matrixSetup - bench.start)/1000.;
-
-	//printf ("thread %d Sync \n", threadNumber);
-
-	//printf ("thread %d process %d Prepare Sync \n", tInfo->threadNumber, tInfo->currProcess);
-
-	/**
-	 * Synchronize threads before starting
-	 */
-	pthread_mutex_lock (sharedData->mutex);
-	sharedData->nBarrier++;
-	if (sharedData->nBarrier < sharedData->nThreadsCpu)
-		pthread_cond_wait(sharedData->cond, sharedData->mutex);
-	else {
-		sharedData->nBarrier = 0;
-		pthread_cond_broadcast(sharedData->cond);
-	}
-	pthread_mutex_unlock (sharedData->mutex);
-
+	GpuSimulationController *gpuSimulation = new GpuSimulationController(tInfo);
 
 	/**
 	 * Launches the execution of all threads
 	 */
-	launchGpuExecution(sharedData, tInfo);
-
-//	for (int type = 0; type < totalTypes; type++)
-//		delete[] sharedData->matrixList[type];
-//	delete[] sharedData->matrixList;
-//	delete sharedData;
+	gpuSimulation->launchGpuExecution();
 
 	return 0;
 }

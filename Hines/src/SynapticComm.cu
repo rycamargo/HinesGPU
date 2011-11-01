@@ -158,49 +158,6 @@ ConnGpu* createGpuConnections( MPIConnectionInfo *connInfo, int destType, int *n
 	return connGpuTypeHost;
 }
 
-
-/**
- * Counts the number of spikes received at each synapse by each neuron of a given type
- * Used only to test if the implementation of createGpuConnections is working
- */
-int **countReceivedSpikesCpu(ConnGpu *connGpuList, int nNeurons, int nGroups, ucomp **nGeneratedSpikes) {
-
-	int nSynapses = 2;
-
-	int **nReceivedSpikes = new int *[nSynapses];
-	nReceivedSpikes[0] = new int[nNeurons];
-	nReceivedSpikes[1] = new int[nNeurons];
-	for (int i=0; i<nNeurons; i++) {
-		nReceivedSpikes[0][i] = 0;
-		nReceivedSpikes[1][i] = 0;
-	}
-
-	int typeTmp = connGpuList[0].destHost[0]/CONN_NEURON_TYPE;
-
-	int nConsideredSynapses = 0;
-	int nAddedSpikes = 0;
-
-	for (int group = 0; group < nGroups; group++) {
-		ConnGpu & connGpu = connGpuList[group];
-		for (int iConn = 0; iConn < connGpu.nConnectionsTotal; iConn++) {
-			assert (typeTmp == connGpu.destHost[iConn]/CONN_NEURON_TYPE);
-			nReceivedSpikes[ connGpu.synapseHost[iConn] ][ connGpu.destHost[iConn]%CONN_NEURON_TYPE ] +=
-					nGeneratedSpikes[ connGpu.srcHost[iConn]/CONN_NEURON_TYPE ][ connGpu.srcHost[iConn]%CONN_NEURON_TYPE ];
-
-			nConsideredSynapses++;
-			nAddedSpikes += nGeneratedSpikes[ connGpu.srcHost[iConn]/CONN_NEURON_TYPE ][ connGpu.srcHost[iConn]%CONN_NEURON_TYPE ];
-		}
-		//printf("###\n");
-	}
-
-	printf ("nConsideredSynapses = %d    nAddedSpikes = %d\n", nConsideredSynapses, nAddedSpikes);
-
-	//printf("###\n");
-
-	return nReceivedSpikes;
-
-}
-
 /**
  * Count the number of spikes delivered to each neuron
  * TODO: change ConnGpu connGpuDev to reference

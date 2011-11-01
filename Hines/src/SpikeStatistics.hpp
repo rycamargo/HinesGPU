@@ -13,6 +13,9 @@
 
 class SpikeStatistics {
 
+    FILE *nSpkfile;
+    FILE *lastSpkfile;
+
 	int *nNeurons;
 	int *typeList;
 	int nTypes;
@@ -36,7 +39,7 @@ public:
 
 	void printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess);
 
-	void printKernelSpikeStatistics(FILE *nSpkfile, FILE *lastSpkfile, ftype currentTime);
+	void printKernelSpikeStatistics(ftype currentTime);
 };
 
 #endif /* SPIKESTATISTICS_HPP_ */

@@ -4,6 +4,8 @@
 #include "HinesMatrix.hpp"
 #include "PlatformFunctions.hpp"
 #include "SpikeStatistics.hpp"
+//#include "NeuronInfoWriter.hpp"
+
 //#include "Connections.hpp"
 #include <cstdlib>
 #include <pthread.h>
@@ -129,6 +131,22 @@ typedef struct {
  */
 
 typedef struct {
+
+	int nKernelSteps; // Number of integration steps performed on each kernel call
+
+	int *nBlocksComm;  // Defined only for the types of the current process
+	int *nThreadsComm; // Defined only for the types of the current process
+
+	int *nBlocksProc;  // Defined only for the types of the current process
+
+    int maxThreadsProc;
+    int maxThreadsComm;
+    int sharedMemSizeProc;
+    int sharedMemSizeComm;
+
+} KernelInfo;
+
+typedef struct {
 	ftype **spikeListDevice;
 	ftype **weightListDevice;
 	int **spikeListPosDevice;
@@ -175,14 +193,14 @@ typedef struct {
 	random_data **randBuf;
 
 	SpikeStatistics *spkStat;
+	struct NeuronInfoWriter *neuronInfoWriter;
 
 	pthread_cond_t *cond;
 	pthread_mutex_t *mutex;
 	int nBarrier;
 
+	KernelInfo *kernelInfo;
 	int nThreadsCpu;
-
-	int nKernelSteps; // Number of integration steps performed on each kernel call
 
 	int *typeList;
 	class Connections *connection;
@@ -198,6 +216,7 @@ typedef struct {
 	ftype inhPyrWeight;
 
 	ftype totalTime;
+	ftype dt;
 
 	unsigned int globalSeed;
 
@@ -214,7 +233,6 @@ typedef struct {
 	int *typeProcess; // The rank of the process assigned to that type
 
 	int nProcesses;
-	int nThreadsCpu;
 
 	int startTypeProcess;
 	int endTypeProcess;
@@ -224,6 +242,16 @@ typedef struct {
 	int endTypeThread;
 	int threadNumber;
 
+    struct cudaDeviceProp *prop;
+	int deviceNumber;
 } ThreadInfo;
+
+
+typedef struct {
+	int listSize;
+	ftype *spikeTimes;
+	int *spikeDest;
+	int nRandom;
+} RandomSpikeInfo;
 
 #endif

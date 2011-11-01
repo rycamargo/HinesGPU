@@ -12,6 +12,9 @@
 
 SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int startTypeProcess, int endTypeProcess) {
 
+    nSpkfile = 0;
+    lastSpkfile = 0;
+
 	this->typeList = typeList;
 	this->nNeurons = nNeurons;
 	this->nTypes   = nTypes;
@@ -48,6 +51,8 @@ SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int s
 
 SpikeStatistics::~SpikeStatistics() {
 
+	if (nSpkfile != 0) fclose(nSpkfile);
+	if (lastSpkfile != 0) fclose(lastSpkfile);
 }
 
 void SpikeStatistics::addGeneratedSpikes(int type, int neuron, ftype *spikeTimes, int nSpikes) {
@@ -62,7 +67,13 @@ void SpikeStatistics::addReceivedSpikes(int type, int neuron, int nReceivedSpike
 	totalReceivedSpikes[type][neuron] += nReceivedSpikes;
 }
 
-void SpikeStatistics::printKernelSpikeStatistics(FILE *nSpkfile, FILE *lastSpkfile, ftype currentTime) {
+void SpikeStatistics::printKernelSpikeStatistics( ftype currentTime) {
+
+    if (nSpkfile == 0)
+    	nSpkfile = fopen("nSpikeKernel.dat", "w");
+
+    if (lastSpkfile == 0)
+    	lastSpkfile = fopen("lastSpikeKernel.dat", "w");
 
 	for (int type=0; type<nTypes; type++) {
 		fprintf(nSpkfile,	"%-10.2f\ttype=%d | ", currentTime, type);

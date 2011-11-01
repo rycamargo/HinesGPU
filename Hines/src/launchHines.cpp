@@ -107,8 +107,6 @@ void *launchHostExecution(void *ptr) {
 	SharedNeuronGpuData *sharedData = tInfo->sharedData;
 
 	FILE *vmKernelFile = fopen("vmKernel.dat", "w");
-	FILE *nSpkfile 	   = fopen("nSpikeKernel.dat", "w");
-	FILE *lastSpkfile  = fopen("lastSpikeKernel.dat", "w");
 	FILE *sampleVmFile = fopen("sampleVm.dat", "w");
 
 	int totalRandom = 0;
@@ -134,8 +132,8 @@ void *launchHostExecution(void *ptr) {
 	initstate_r(tInfo->sharedData->globalSeed + threadNumber,
 			randstate, 256, tInfo->sharedData->randBuf[threadNumber]);
 
-	int startType = threadNumber * (totalTypes / tInfo->nThreadsCpu);
-	int endType   = (threadNumber+1) * (totalTypes / tInfo->nThreadsCpu);
+	int startType = threadNumber * (totalTypes / sharedData->nThreadsCpu);
+	int endType   = (threadNumber+1) * (totalTypes / sharedData->nThreadsCpu);
 
 	if (tInfo->threadNumber == 0)
 		tInfo->sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList, startType, endType);
@@ -181,7 +179,7 @@ void *launchHostExecution(void *ptr) {
 
 	ftype totalTime = sharedData->totalTime; // 1 second
 	int nSteps = totalTime / sharedData->matrixList[0][0].dt;
-	int kernelSteps = sharedData->nKernelSteps;
+	int kernelSteps = sharedData->kernelInfo->nKernelSteps;
 
 	if (threadNumber == 0) {
 		sharedData->connection = new Connections();
@@ -412,8 +410,7 @@ void *launchHostExecution(void *ptr) {
 
 		// Uses only data from SpikeStatistics::addGeneratedSpikes
 		if (benchConf.printAllSpikeTimes == 1 && threadNumber == 0) {
-			sharedData->spkStat->printKernelSpikeStatistics(nSpkfile, lastSpkfile,
-					(kStep+kernelSteps)*sharedData->matrixList[0][0].dt);
+			sharedData->spkStat->printKernelSpikeStatistics((kStep+kernelSteps)*sharedData->matrixList[0][0].dt);
 		}
 
 		if (threadNumber == 0)
@@ -462,7 +459,6 @@ ThreadInfo *createInfoArray(int nThreads, ThreadInfo *model){
 		tInfoArray[i].currProcess	= model->currProcess;
 
 		tInfoArray[i].nProcesses	= model->nProcesses;
-		tInfoArray[i].nThreadsCpu	= model->nThreadsCpu;
 
 		tInfoArray[i].startTypeThread	= model->startTypeThread;
 		tInfoArray[i].endTypeThread		= model->endTypeThread;
@@ -510,11 +506,12 @@ int main(int argc, char **argv) {
 	int nThreads = atoi(argv[4]);
 	assert ( 0 < nThreads && nThreads < 32);
 
+	int nKernelSteps = 100;
 	ThreadInfo *tInfo = new ThreadInfo;
 	tInfo->sharedData = new SharedNeuronGpuData;
-	tInfo->sharedData->nKernelSteps = 100;
+    tInfo->sharedData->kernelInfo = new KernelInfo;
+	tInfo->sharedData->kernelInfo->nKernelSteps = nKernelSteps;
 
-	tInfo->nThreadsCpu 	= nThreads;
 	tInfo->nProcesses 	= nProcesses;
 	tInfo->totalTypesProcess = 2*nThreads;
 	tInfo->totalTypes = tInfo->totalTypesProcess * nProcesses;
@@ -545,8 +542,8 @@ int main(int argc, char **argv) {
 	tInfo->sharedData->synData = 0;
 	tInfo->sharedData->hGpu = 0;
 	tInfo->sharedData->hList = 0;
-	tInfo->sharedData->nThreadsCpu = tInfo->nThreadsCpu;
-	tInfo->sharedData->randBuf = new random_data *[tInfo->nThreadsCpu];
+	tInfo->sharedData->nThreadsCpu = nThreads;
+	tInfo->sharedData->randBuf = new random_data *[nThreads];
 
 	tInfo->sharedData->inputSpikeRate = 0.1;
 	tInfo->sharedData->pyrConnRatio   = 0.1;
@@ -721,7 +718,7 @@ int main(int argc, char **argv) {
 				char *posChar = new char[1];
 				posChar[0] = simType[3];
 				int pos = atoi(posChar);
-				tInfo->sharedData->nKernelSteps = batch[pos];
+				nKernelSteps = batch[pos];
 				delete[] posChar;
 			}
 
@@ -760,12 +757,12 @@ int main(int argc, char **argv) {
 			bench.meanGenSpikes, bench.meanGenPyrSpikes, bench.meanGenInhSpikes,
 			bench.meanRecSpikes, bench.meanRecPyrSpikes, bench.meanRecInhSpikes,
 			tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio,
-			tInfo->sharedData->inhConnRatio, tInfo->sharedData->nKernelSteps);
+			tInfo->sharedData->inhConnRatio, nKernelSteps);
 	fprintf (outFile, "Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
 	fprintf (outFile, "HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n", bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
 	fprintf (outFile, "#------------------------------------------------------------------------------\n");
 
-	printf ("nKernelSteps=%d\n", tInfo->sharedData->nKernelSteps);
+	printf ("nKernelSteps=%d\n", nKernelSteps);
 	printf("\n");
 
 	fclose(outFile);

@@ -3,6 +3,8 @@
 #include "HinesStruct.hpp"
 #include "Connections.hpp"
 #include "SpikeStatistics.hpp"
+#include "NeuronInfoWriter.hpp"
+
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
@@ -14,33 +16,39 @@ class GpuSimulationController {
 private:
 	ThreadInfo * tInfo;
 	SharedNeuronGpuData *sharedData;
+	KernelInfo *kernelInfo;
+	int kStep;
 
 public:
 	GpuSimulationController(ThreadInfo *tInfo);
     int launchGpuExecution();
 
 private:
+
+    void createNeurons();
+    void defineThreadTypes();
+    void updateSharedDataInfo();
     void prepareSynapses();
-    int prepareExecution(int type);
-    void writeSampleVm(ftype **& vmTimeSerie, int vmTimeSerieMemSize, int & kStep, FILE *& outFile, ftype & dt);
-    void checkGpuCommunicationsSpikes(int & spikeListSizeMax, int & type, int & kStep, ftype & dt, int nThreadsComm);
-    void updateBenchmark();
-    int updateSpikeListSizeGlobal(int type, int maxSpikesNeuron);
-    void transferSynapticSpikeInfoToGpu(int type, int spikeListSizeMax);
-    void mpiAllGatherConnections();
-    void syncCpuThreads();
-    int generateRandomSpikes(int type, int kStep, ftype dt, int randomSpikeListSize, ftype *& randomSpikeTimes, int *& randomSpikeDest);
-    void performCPUCommunication(int type, ftype & dt, int & kStep, int maxSpikesNeuron, int nRandom, int nThreadsComm);
-    void performGPUCommunications(int & nRandom, int randomSpikeListSize, ftype *& randomSpikeTimes, int *& randomSpikeDest, int & nThreadsComm, int & sharedMemSizeComm, int & type, int & threadNumber, int *nBlocksComm, int *& nNeurons, SynapticData *& synData, HinesStruct **hGpu);
-    void checkVmValues();
-    void writeVmToFile(FILE *vmKernelFile, ftype & dt, int & kStep);
+    int  prepareExecution(int type);
     void prepareGpuSpikeDeliveryStructures();
-    void createGpuCommunicationStructures(int *nBlocksComm, struct cudaDeviceProp & prop, int maxThreadsComm);
+    void createGpuCommunicationStructures();
+    void configureGpuKernel();
+
+    int  updateSpikeListSizeGlobal(int type, int maxSpikesNeuron);
+    void transferSynapticSpikeInfoToGpu(int type, int spikeListSizeMax);
+    void generateRandomSpikes(int type, RandomSpikeInfo & randomSpkInfo);
+    void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
+    void performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo);
     void addReceivedSpikesToTargetChannelCPU();
     void copyGeneratedSpikeListsToGPU();
     void readGeneratedSpikesFromGPU();
-    void broadcastGeneratedSpikesMPISync();
-    void defineThreadTypes();
-    void createNeurons();
 
+    void mpiAllGatherConnections();
+    void broadcastGeneratedSpikesMPISync();
+
+    void checkGpuCommunicationsSpikes(int spikeListSizeMax, int type);
+    void checkVmValues();
+
+    void syncCpuThreads();
+    void updateBenchmark();
 };

@@ -42,6 +42,11 @@ HinesMatrix::~HinesMatrix() {
 	freeMem();
 }
 
+void HinesMatrix::redefineGenSpikeTimeList( ftype *targetSpikeTimeListAddress ) {
+	delete []spikeTimes;
+	spikeTimes = targetSpikeTimeListAddress;
+}
+
 /**
  *  [ 1 | 2 | 3 ]
  */

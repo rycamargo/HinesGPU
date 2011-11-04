@@ -37,7 +37,7 @@ public:
 
 	void addReceivedSpikes(int type, int neuron, int nReceivedSpikes);
 
-	void printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess);
+	void printSpikeStatistics(const char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess);
 
 	void printKernelSpikeStatistics(ftype currentTime);
 };

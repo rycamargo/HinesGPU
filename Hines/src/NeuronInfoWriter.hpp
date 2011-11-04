@@ -1,5 +1,8 @@
 #include "HinesStruct.hpp"
 
+#ifndef NEURONINFOWRITER_H_
+#define NEURONINFOWRITER_H_
+
 class NeuronInfoWriter {
 
 private:
@@ -20,3 +23,5 @@ public:
     void writeVmToFile(int kStep);
     void writeSampleVm(int kStep);
 };
+
+#endif /* NEURONINFOWRITER_H_ */

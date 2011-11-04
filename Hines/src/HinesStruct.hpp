@@ -204,7 +204,7 @@ typedef struct {
 
 	int *typeList;
 	class Connections *connection;
-	struct MPIConnectionInfo *connInfo;
+	struct ConnectionInfo *connInfo;
 	struct ConnGpu **connGpuListHost;
 	struct ConnGpu **connGpuListDevice;
 
@@ -227,6 +227,8 @@ typedef struct {
 	SharedNeuronGpuData *sharedData; 	// Shared among the threads
 	int *nNeurons;						// Shared among the threads
 	int *nComp;							// Shared among the threads
+
+	int kStep;
 
 	int totalTypes;
 	int totalTypesProcess;

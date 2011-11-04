@@ -95,6 +95,8 @@ public:
 	HinesMatrix();
 	~HinesMatrix();
 
+	void redefineGenSpikeTimeList( ftype *targetSpikeTimeListAddress );
+
 	int getnComp() { return nComp; }
 	void setCurrent(int comp, ftype value) {
 		curr[comp] = value;

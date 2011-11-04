@@ -93,7 +93,7 @@ void SpikeStatistics::printKernelSpikeStatistics( ftype currentTime) {
 	fprintf(lastSpkfile, "\n");
 }
 
-void SpikeStatistics::printSpikeStatistics(char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess) {
+void SpikeStatistics::printSpikeStatistics(const char *filename, ftype currentTime, BenchTimes & bench, int startTypeProcess, int endTypeProcess) {
 
 //	ftype genSpikes = 0;
 //	ftype recSpikes = 0;

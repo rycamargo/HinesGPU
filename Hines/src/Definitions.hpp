@@ -8,7 +8,7 @@
 #ifndef DEFINITIONS_HPP_
 #define DEFINITIONS_HPP_
 
-#define MPI_GPU_NN
+//#define MPI_GPU_NN
 
 //#include <time.h>
 #include <stdlib.h>

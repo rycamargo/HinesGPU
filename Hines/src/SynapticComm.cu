@@ -20,7 +20,7 @@ extern void __syncthreads(void);
 extern void checkCUDAError(const char *msg);
 
 // TODO: remove connections from Connections NEW
-ConnGpu* createGpuConnections( MPIConnectionInfo *connInfo, int destType, int *nNeurons, int nGroups ) {
+ConnGpu* createGpuConnections( ConnectionInfo *connInfo, int destType, int *nNeurons, int nGroups ) {
 
 	// Contains the structures with the connections for each neuron group
 	ConnGpu *connGpuTypeHost = (ConnGpu *)malloc(nGroups*sizeof(ConnGpu));

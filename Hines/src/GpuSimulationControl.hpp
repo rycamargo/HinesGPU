@@ -11,22 +11,22 @@
 #include <cstring>
 #include <pthread.h>
 
-class GpuSimulationController {
+#ifndef GPUSIMULATIONCONTROL_H_
+#define GPUSIMULATIONCONTROL_H_
+
+class GpuSimulationControl {
 
 private:
 	ThreadInfo * tInfo;
 	SharedNeuronGpuData *sharedData;
 	KernelInfo *kernelInfo;
-	int kStep;
 
 public:
-	GpuSimulationController(ThreadInfo *tInfo);
-    int launchGpuExecution();
+	GpuSimulationControl(ThreadInfo *tInfo);
+	//int launchGpuExecution();
 
-private:
+//private:
 
-    void createNeurons();
-    void defineThreadTypes();
     void updateSharedDataInfo();
     void prepareSynapses();
     int  prepareExecution(int type);
@@ -37,18 +37,21 @@ private:
     int  updateSpikeListSizeGlobal(int type, int maxSpikesNeuron);
     void transferSynapticSpikeInfoToGpu(int type, int spikeListSizeMax);
     void generateRandomSpikes(int type, RandomSpikeInfo & randomSpkInfo);
-    void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
     void performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo);
-    void addReceivedSpikesToTargetChannelCPU();
+    void performGpuNeuronalProcessing();
+
     void copyGeneratedSpikeListsToGPU();
     void readGeneratedSpikesFromGPU();
 
-    void mpiAllGatherConnections();
-    void broadcastGeneratedSpikesMPISync();
+    void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
+    void addReceivedSpikesToTargetChannelCPU();
+
+
 
     void checkGpuCommunicationsSpikes(int spikeListSizeMax, int type);
     void checkVmValues();
 
-    void syncCpuThreads();
-    void updateBenchmark();
 };
+
+#endif /* GPUSIMULATIONCONTROL_H_ */
+

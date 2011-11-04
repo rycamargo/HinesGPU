@@ -13,6 +13,7 @@
 #define GPU_COMM 0
 #define CPU_COMM 1
 #define CHK_COMM 2
+#define CPU_PROC 3
 
 // connRead = Comm Kernel time
 // connWait = global sync after Hines Kernel

@@ -691,7 +691,6 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 		h.currStep = currStep;
 	}
 
-	//printf("spikes=%d neuron=%d\n", nGeneratedSpikes, neuron);
 	h.nGeneratedSpikes[neuron] = nGeneratedSpikes;
 
 	//__syncthreads();
@@ -708,8 +707,6 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 	}
 
 	vmListGlobal[neuron] = vmListLocal[POS(nComp-1)];
-
-	//h.currStep = h.currStep + nSteps;
 
 }
 //} // extern C

@@ -191,17 +191,27 @@ void configureSimulation(char **argv, ThreadInfo *& tInfo, int & nNeurons, char 
 		else if (simType[0] == 'n' || simType[0] == 'd') {
 			printf ("Simulation configured as: Running scalability experiments.\n");
 
-			benchConf.printSampleVms = 1; // TODO: sould be 0
+			benchConf.printSampleVms = 1;
 			benchConf.printAllVmKernelFinish = 0;
 			benchConf.printAllSpikeTimes = 0;
-			if (mode=='G') benchConf.gpuCommMode = GPU_COMM;
-			else if (mode=='H') benchConf.gpuCommMode = CPU_COMM;
-			else if (mode=='C') benchConf.gpuCommMode = CPU_PROC;
+			benchConf.checkGpuComm = 0;
+			if (mode=='G') {
+				benchConf.simProcMode = NN_GPU;
+				benchConf.simCommMode = NN_GPU;
+			}
+			else if (mode=='H') {
+				benchConf.simProcMode = NN_GPU;
+				benchConf.simCommMode = NN_CPU;
+			}
+			else if (mode=='C') {
+				benchConf.simProcMode = NN_CPU;
+				benchConf.simCommMode = NN_CPU;
+			}
 
 			if (simType[0] == 'n') benchConf.gpuCommBenchMode = GPU_COMM_SIMPLE;
 			else if (simType[0] == 'd') benchConf.gpuCommBenchMode = GPU_COMM_DETAILED;
 
-			tInfo->sharedData->totalTime   = 500;
+			tInfo->sharedData->totalTime   = 100;
 			tInfo->sharedData->inputSpikeRate = 0.01;
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05

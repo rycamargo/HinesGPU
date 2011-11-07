@@ -95,7 +95,7 @@ void PerformSimulation::initializeThreadInformation(){
 
 void PerformSimulation::updateBenchmark()
 {
-    if(benchConf.gpuCommMode == CPU_COMM) {
+    if(benchConf.simCommMode == NN_CPU) {
 
 				bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
 				bench.totalConnRead	  	+= (bench.connRead 		- bench.kernelFinish)/1000.;
@@ -290,7 +290,7 @@ int PerformSimulation::launchExecution() {
 		sharedData->connection = new Connections();
 		sharedData->connection->connectRandom (tInfo );
 
-		if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM) {
+		if (benchConf.simCommMode == NN_GPU) {
 			sharedData->connGpuListHost   = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
 			sharedData->connGpuListDevice = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
 		}
@@ -314,13 +314,14 @@ int PerformSimulation::launchExecution() {
     /*--------------------------------------------------------------
 	 * Creates the connection list for usage in the GPU communication
 	 *--------------------------------------------------------------*/
-    if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM)
+    //if (benchConf.simCommMode == NN_GPU || benchConf.simProcMode == NN_GPU)
+    if (benchConf.simCommMode == NN_GPU)
     	gpuSimulation->createGpuCommunicationStructures();
 
     /*--------------------------------------------------------------
 	 * Prepare the lists of generated spikes used for GPU spike delivery
 	 *--------------------------------------------------------------*/
-    if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM)
+    if (benchConf.simCommMode == NN_GPU || benchConf.simProcMode == NN_GPU)
     	gpuSimulation->prepareGpuSpikeDeliveryStructures();
 
     /*--------------------------------------------------------------
@@ -329,7 +330,7 @@ int PerformSimulation::launchExecution() {
 #ifdef MPI_GPU_NN
     if (threadNumber == 0) {
 
-    	if (benchConf.gpuCommMode == CPU_PROC) {
+    	if (benchConf.simProcMode == NN_CPU) {
 
     		synData->genSpikeTimeListHost     = (ftype **) malloc (sizeof(ftype *)  * tInfo->totalTypes);
     		synData->nGeneratedSpikesHost     = (ucomp **) malloc (sizeof(ucomp *)  * tInfo->totalTypes);
@@ -395,7 +396,7 @@ int PerformSimulation::launchExecution() {
 		if (threadNumber == 0) // Benchmarking
 			bench.kernelStart  = gettimeInMilli();
 
-		if (benchConf.gpuCommMode == CPU_PROC)
+		if (benchConf.simProcMode == NN_CPU)
 			cpuSimulation->performCpuNeuronalProcessing();
 		else
 			gpuSimulation->performGpuNeuronalProcessing();
@@ -409,7 +410,7 @@ int PerformSimulation::launchExecution() {
 		/*--------------------------------------------------------------
 		 * Reads information from spike sources fromGPU
 		 *--------------------------------------------------------------*/
-		if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM)
+		if (benchConf.simProcMode == NN_GPU)
 			gpuSimulation->readGeneratedSpikesFromGPU();
 
 		/*--------------------------------------------------------------
@@ -417,7 +418,7 @@ int PerformSimulation::launchExecution() {
 		 *--------------------------------------------------------------*/
 		syncCpuThreads();
 
-		if (threadNumber == 0 && benchConf.gpuCommMode == CPU_COMM)
+		if (threadNumber == 0 && benchConf.simCommMode == NN_CPU)
 			bench.connRead = gettimeInMilli();
 		else if (threadNumber == 0) {
 			bench.connRead = 0;
@@ -438,7 +439,7 @@ int PerformSimulation::launchExecution() {
 		 * Adds the generated spikes to the target synaptic channel
 		 * Used only for communication processing in the CPU
 		 *--------------------------------------------------------------*/
-		if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == CPU_COMM || benchConf.gpuCommMode == CPU_PROC) {
+		if (benchConf.simCommMode == NN_CPU) {
 			gpuSimulation->addReceivedSpikesToTargetChannelCPU();
 			syncCpuThreads();
 		}
@@ -446,7 +447,7 @@ int PerformSimulation::launchExecution() {
 		/*--------------------------------------------------------------
 		 * Used to print spike statistics in the end of the simulation
 		 *--------------------------------------------------------------*/
-		if (threadNumber == 0 && benchConf.gpuCommMode == GPU_COMM )
+		if (threadNumber == 0 && benchConf.simCommMode == NN_GPU )
 			for (int type=0; type < tInfo->totalTypes; type++)
 				for (int c=0; c<nNeurons[type]; c++)
 					sharedData->spkStat->addGeneratedSpikes(type, c, NULL, synData->nGeneratedSpikesHost[type][c]);
@@ -462,7 +463,7 @@ int PerformSimulation::launchExecution() {
 		 * Writes Vm to file at the end of each kernel execution
 		 *--------------------------------------------------------------*/
 		if (benchConf.assertResultsAll == 1)
-			if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == CPU_COMM || benchConf.gpuCommMode == GPU_COMM)
+			if (benchConf.simProcMode == NN_GPU)
 				gpuSimulation->checkVmValues();
 
 		/*--------------------------------------------------------------
@@ -474,7 +475,7 @@ int PerformSimulation::launchExecution() {
 		/*--------------------------------------------------------------
 		 * Copy the generatedSpikeList to the GPUs
 		 *--------------------------------------------------------------*/
-		if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM)
+		if (benchConf.simCommMode == NN_GPU)
 			gpuSimulation->copyGeneratedSpikeListsToGPU();
 
 		/*-------------------------------------------------------
@@ -494,7 +495,7 @@ int PerformSimulation::launchExecution() {
 			/*-------------------------------------------------------
 			 * Perform GPU Communications
 			 *-------------------------------------------------------*/
-			if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == GPU_COMM)
+			if (benchConf.simCommMode == NN_GPU)
 				gpuSimulation->performGPUCommunications(type, randomSpkInfo);
 
 			delete []randomSpkInfo.spikeTimes;
@@ -503,12 +504,12 @@ int PerformSimulation::launchExecution() {
 			/*-------------------------------------------------------
 			 * Perform CPU Communications
 			 *-------------------------------------------------------*/
-			if (benchConf.gpuCommMode == CHK_COMM || benchConf.gpuCommMode == CPU_COMM || benchConf.gpuCommMode == CPU_PROC)
+			if (benchConf.simCommMode == NN_CPU)
 				gpuSimulation->performCPUCommunication(type, maxSpikesNeuron, randomSpkInfo.nRandom);
 		}
 
 		if (threadNumber == 0)
-			if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE || benchConf.gpuCommMode == CPU_COMM)
+			if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE || benchConf.simCommMode == NN_CPU)
 				bench.connWrite = gettimeInMilli();
 
 		if (threadNumber == 0 && benchConf.printSampleVms == 1)

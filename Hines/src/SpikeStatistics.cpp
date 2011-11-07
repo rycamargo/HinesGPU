@@ -19,13 +19,13 @@ SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int s
 	this->nNeurons = nNeurons;
 	this->nTypes   = nTypes;
 
-	totalGeneratedSpikes = new double *[nTypes];
-	totalReceivedSpikes  = new double *[nTypes];
+	totalGeneratedSpikes = new ftype *[nTypes];
+	totalReceivedSpikes  = new ftype *[nTypes];
 	lastGeneratedSpikeTimes = new ftype *[nTypes];
 
 	for (int type=0; type<nTypes; type++) {
-		totalGeneratedSpikes[type] = new double[nNeurons[type]];
-		totalReceivedSpikes[type]  = new double[nNeurons[type]];
+		totalGeneratedSpikes[type] = new ftype[nNeurons[type]];
+		totalReceivedSpikes[type]  = new ftype[nNeurons[type]];
 		lastGeneratedSpikeTimes[type] = new ftype[nNeurons[type]];
 
 		for (int neuron=0; neuron < nNeurons[type]; neuron++) {

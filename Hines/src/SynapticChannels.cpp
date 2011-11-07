@@ -279,6 +279,8 @@ void SynapticChannels::updateSpikeListGpu(ftype time, ftype *spikeListGlobal,
 
 	spikeListSize += (nAddedSpikes - nRemovedSpikes);
 
+	//printf("spikeListSize=%d\n", spikeListSize);
+
 	randomSpikeComp.clear();
 	randomSpikeTimes.clear();
 	randomSpikeWeights.clear();

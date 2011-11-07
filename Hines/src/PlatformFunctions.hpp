@@ -10,10 +10,11 @@
 
 #include "Definitions.hpp"
 
-#define GPU_COMM 0
-#define CPU_COMM 1
-#define CHK_COMM 2
-#define CPU_PROC 3
+#define NN_GPU 0
+#define NN_CPU 1
+
+//#define CHK_COMM 2
+//#define CPU_PROC 3
 
 // connRead = Comm Kernel time
 // connWait = global sync after Hines Kernel
@@ -38,7 +39,11 @@ struct BenchConfig {
 	ucomp verbose;
 
 	ucomp gpuCommBenchMode;
-	ucomp gpuCommMode;
+
+	ucomp simCommMode;
+	ucomp simProcMode;
+
+	ucomp checkGpuComm;
 };
 
 struct BenchTimes {

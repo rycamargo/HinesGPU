@@ -24,8 +24,8 @@ class SpikeStatistics {
 	int pyrNeurons;
 	int inhNeurons;
 
-	double **totalGeneratedSpikes;
-	double **totalReceivedSpikes;
+	ftype **totalGeneratedSpikes;
+	ftype **totalReceivedSpikes;
 
 	ftype **lastGeneratedSpikeTimes;
 

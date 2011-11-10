@@ -781,12 +781,6 @@ void GpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 				targetSynapse->addSpikeList(connInfo->synapse[conn], nGeneratedSpikes, spikeTimes, connInfo->delay[conn], connInfo->weigth[conn]);
 			}
 		}
-
-		// Used to print spike statistics in the end of the simulation
-		for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
-			for (int source = 0; source < tInfo->nNeurons[type]; source++)
-				sharedData->spkStat->addGeneratedSpikes(type, source, NULL,
-						sharedData->synData->nGeneratedSpikesHost[type][source]);
 	}
 }
 

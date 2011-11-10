@@ -247,10 +247,11 @@ int PerformSimulation::launchExecution() {
     /*--------------------------------------------------------------
 	 * Allocates the memory on the GPU for neuron information and transfers the data
 	 *--------------------------------------------------------------*/
-    for(int type = startTypeThread;type < endTypeThread;type++){
-        printf("GPU allocation with %d neurons, %d comparts on device %d thread %d process %d.\n", nNeurons[type], sharedData->matrixList[type][0].nComp, tInfo->deviceNumber, threadNumber, tInfo->currProcess);
-        gpuSimulation->prepareExecution(type);
-    }
+    //if (benchConf.simProcMode == NN_GPU)
+    	for(int type = startTypeThread;type < endTypeThread;type++){
+    		printf("GPU allocation with %d neurons, %d comparts on device %d thread %d process %d.\n", nNeurons[type], sharedData->matrixList[type][0].nComp, tInfo->deviceNumber, threadNumber, tInfo->currProcess);
+    		gpuSimulation->prepareExecution(type);
+    	}
 
     /*--------------------------------------------------------------
 	 * Allocates the memory on the GPU for the communications and transfers the data
@@ -447,8 +448,8 @@ int PerformSimulation::launchExecution() {
 		/*--------------------------------------------------------------
 		 * Used to print spike statistics in the end of the simulation
 		 *--------------------------------------------------------------*/
-		if (threadNumber == 0 && benchConf.simCommMode == NN_GPU )
-			for (int type=0; type < tInfo->totalTypes; type++)
+		if (benchConf.simCommMode == NN_GPU || tInfo->nProcesses > 1 )
+			for (int type=tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
 				for (int c=0; c<nNeurons[type]; c++)
 					sharedData->spkStat->addGeneratedSpikes(type, c, NULL, synData->nGeneratedSpikesHost[type][c]);
 

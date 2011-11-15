@@ -140,7 +140,7 @@ void SpikeStatistics::printSpikeStatistics(const char *filename, ftype currentTi
 	bench.meanRecInhSpikes /= inhNeurons;
 
 
-	printf("meanGenSpikes[T|P|I]=[%3.2f|%3.2f|%3.2f] meanRecSpikes[T|P|I]=[%5.2f|%5.2f|%5.2f]\n",
+	printf("meanGenSpikes[T|P|I]=[%3.2f|%3.2f|%3.2f]\nmeanRecSpikes[T|P|I]=[%5.2f|%5.2f|%5.2f]\n",
 			bench.meanGenSpikes, bench.meanGenPyrSpikes, bench.meanGenInhSpikes,
 			bench.meanRecSpikes, bench.meanRecPyrSpikes, bench.meanRecInhSpikes);
 

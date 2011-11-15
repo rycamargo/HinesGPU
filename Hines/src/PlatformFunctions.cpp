@@ -30,7 +30,7 @@ uint64 gettimeInMilli()
 	return (uint64)(start.QuadPart/(proc_freq.QuadPart/1000L));
 #else
     struct timeval tv;
-    int error = gettimeofday(&tv, 0);
+    gettimeofday(&tv, 0);
     return (tv.tv_sec*1000 + tv.tv_usec/1000);
 #endif
     

@@ -299,7 +299,6 @@ int main(int argc, char **argv) {
 	int nProcesses = 1;
     int currentProcess=0;
 #ifdef MPI_GPU_NN
-    MPI_Status status;
     int threadLevel;
     //MPI_Init (&argc, &argv);
     MPI_Init_thread(&argc, &argv, MPI_THREAD_FUNNELED , &threadLevel);
@@ -373,7 +372,6 @@ int main(int argc, char **argv) {
 	tInfo->sharedData->inputSpikeRate = 0.1;
 	tInfo->sharedData->pyrConnRatio   = 0.1;
 	tInfo->sharedData->inhConnRatio   = 0.1;
-
 	tInfo->sharedData->totalTime   = 100; // in ms
 
 	benchConf.assertResultsAll = 1;
@@ -409,28 +407,8 @@ int main(int argc, char **argv) {
 	bench.finish = gettimeInMilli();
 	bench.finishF = (bench.finish - bench.start)/1000.; 
 
-	printf ("Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
-	printf ("HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n", bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
-	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio, tInfo->sharedData->inhConnRatio);
-
-	FILE *outFile;
-	outFile = fopen("results.dat", "a");
-	fprintf (outFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu \
-			meanGenSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f] meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f] \
-			inpRate=%-5.3f pyrRatio=%-5.3f inhRatio=%-5.3f nKernelSteps=%d\n",
-			mode, nNeurons, tInfo->totalTypes, nComp, nThreads, sizeof(ftype),
-			bench.meanGenSpikes, bench.meanGenPyrSpikes, bench.meanGenInhSpikes,
-			bench.meanRecSpikes, bench.meanRecPyrSpikes, bench.meanRecInhSpikes,
-			tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio,
-			tInfo->sharedData->inhConnRatio, nKernelSteps);
-	fprintf (outFile, "Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
-	fprintf (outFile, "HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n", bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
-	fprintf (outFile, "#------------------------------------------------------------------------------\n");
-
-	printf ("nKernelSteps=%d\n", nKernelSteps);
-	printf("\n");
-
-	fclose(outFile);
+	tInfo->sharedData->neuronInfoWriter->writeResultsToFile(mode, nNeurons, nComp, bench);
+	//delete tInfo->sharedData->neuronInfoWriter;
 
 	delete[] tInfo->nNeurons;
 	delete[] tInfo->nComp;

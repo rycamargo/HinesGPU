@@ -46,9 +46,6 @@ public:
     void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
     void addReceivedSpikesToTargetChannelCPU();
 
-
-
-    void checkGpuCommunicationsSpikes(int spikeListSizeMax, int type);
     void checkVmValues();
 
 };

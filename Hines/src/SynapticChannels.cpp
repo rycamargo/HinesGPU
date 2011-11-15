@@ -119,7 +119,7 @@ void SynapticChannels::updateSpikeListGpu(ftype time, ftype *spikeListGlobal,
 	pthread_mutex_lock (&addSpikeMutex);
 
 	int nRemovedSpikes = 0;
-	int randomPos = 0;
+	unsigned int randomPos = 0;
 	int nRandom = 0;
 
 	int startPosCurr[synapseListSize+1];
@@ -163,10 +163,10 @@ void SynapticChannels::updateSpikeListGpu(ftype time, ftype *spikeListGlobal,
 		}
 
 		startPosNew[syn] = 0;
-		for (int src=0; src < synSpikeSet[syn].size(); src++)
+		for (unsigned int src=0; src < synSpikeSet[syn].size(); src++)
 			startPosNew[syn] += synSpikeSet[syn][src].nGeneratedSpikes;
 
-		for (int i=0; i<randomSpikeComp.size(); i++)
+		for (unsigned int i=0; i<randomSpikeComp.size(); i++)
 			if (randomSpikeComp[i] == syn) {
 				startPosNew[syn]++;
 				nRandom++;
@@ -318,7 +318,8 @@ void SynapticChannels::updateSpikeList(ftype time) {
 	synapseWeightList = spikeList + spikeListSize;
 
 	// Updates the new spikeList
-	int iNew = 0, r = 0;
+	unsigned int r = 0;
+	int iNew = 0;
 	for (int syn=0; syn < synapseListSize; syn++) {
 
 		int synBegin = synSpikeListPos[syn];

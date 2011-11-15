@@ -13,9 +13,9 @@ rm *.o HinesGpu -f
 
 #
 echo "- Running version with 1 thread [C|G|H]"
-./HinesGpu C 2000 4 1 n1l 1 > testDir/C1.dat 2>&1
-./HinesGpu G 2000 4 1 n1l 1 > testDir/G1.dat 2>&1
-./HinesGpu H 2000 4 1 n1l 1 > testDir/H1.dat 2>&1
+./HinesGpu C 1000 4 1 n1l 1 > testDir/C1.dat 2>&1
+./HinesGpu G 1000 4 1 n1l 1 > testDir/G1.dat 2>&1
+./HinesGpu H 1000 4 1 n1l 1 > testDir/H1.dat 2>&1
 cat testDir/C1.dat | grep meanGenSpikes
 cat testDir/G1.dat | grep meanGenSpikes
 cat testDir/H1.dat | grep meanGenSpikes
@@ -29,19 +29,19 @@ cat testDir/G2.dat | grep meanGenSpikes
 cat testDir/H2.dat | grep meanGenSpikes
 
 #
+echo
 echo "2) Building MPI version"
 rm *.o HinesGpu -f
-./buildLinuxMpi.sh > testDir/buildLinux.dat 2>&1
+./buildLinuxMpi.sh > testDir/buildLinuxMpi.dat 2>&1
 
 #
 echo "- Running version with 1 process 1 thread [C|G|H]"
-mpirun -np 1 ./HinesGpu C 2000 4 1 n1l 1 > testDir/C1m1.dat 2>&1
-mpirun -np 1 ./HinesGpu G 2000 4 1 n1l 1 > testDir/G1m1.dat 2>&1
-mpirun -np 1 ./HinesGpu H 2000 4 1 n1l 1 > testDir/H1m1.dat 2>&1
+mpirun -np 1 ./HinesGpu C 1000 4 1 n1l 1 > testDir/C1m1.dat 2>&1
+mpirun -np 1 ./HinesGpu G 1000 4 1 n1l 1 > testDir/G1m1.dat 2>&1
+mpirun -np 1 ./HinesGpu H 1000 4 1 n1l 1 > testDir/H1m1.dat 2>&1
 cat testDir/C1m1.dat | grep meanGenSpikes
 cat testDir/G1m1.dat | grep meanGenSpikes
 cat testDir/H1m1.dat | grep meanGenSpikes
-
 
 echo "- Running version with 2 process 1 threads [C|G|H]"
 mpirun -np 2 ./HinesGpu C 2000 4 1 n1l 1 > testDir/C1m2.dat 2>&1

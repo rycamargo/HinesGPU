@@ -247,7 +247,7 @@ int PerformSimulation::launchExecution() {
     /*--------------------------------------------------------------
 	 * Allocates the memory on the GPU for neuron information and transfers the data
 	 *--------------------------------------------------------------*/
-    //if (benchConf.simProcMode == NN_GPU)
+    if (benchConf.simProcMode == NN_GPU)
     	for(int type = startTypeThread;type < endTypeThread;type++){
     		printf("GPU allocation with %d neurons, %d comparts on device %d thread %d process %d.\n", nNeurons[type], sharedData->matrixList[type][0].nComp, tInfo->deviceNumber, threadNumber, tInfo->currProcess);
     		gpuSimulation->prepareExecution(type);
@@ -256,32 +256,37 @@ int PerformSimulation::launchExecution() {
     /*--------------------------------------------------------------
 	 * Allocates the memory on the GPU for the communications and transfers the data
 	 *--------------------------------------------------------------*/
-    gpuSimulation->prepareSynapses();
+    if (benchConf.simProcMode == NN_GPU)
+    	gpuSimulation->prepareSynapses();
+
     SynapticData *synData = sharedData->synData;
     int nKernelSteps = kernelInfo->nKernelSteps;
 
     /*--------------------------------------------------------------
 	 * Sends the complete data to the GPUs
 	 *--------------------------------------------------------------*/
-    for(int type = startTypeThread;type < endTypeThread;type++){
-        cudaMalloc((void**)((((&(sharedData->hGpu[type]))))), sizeof (HinesStruct) * nNeurons[type]);
-        cudaMemcpy(sharedData->hGpu[type], sharedData->hList[type], sizeof (HinesStruct) * nNeurons[type], cudaMemcpyHostToDevice);
-        checkCUDAError("Memory Allocation:");
+    if (benchConf.simProcMode == NN_GPU) {
+    	for(int type = startTypeThread;type < endTypeThread;type++){
+    		cudaMalloc((void**)((((&(sharedData->hGpu[type]))))), sizeof (HinesStruct) * nNeurons[type]);
+    		cudaMemcpy(sharedData->hGpu[type], sharedData->hList[type], sizeof (HinesStruct) * nNeurons[type], cudaMemcpyHostToDevice);
+    		checkCUDAError("Memory Allocation:");
+    	}
     }
 
     /*--------------------------------------------------------------
 	 * Prepare the spike list in the format used in the GPU
 	 *--------------------------------------------------------------*/
     int maxSpikesNeuron = 5000; //5000;
-    for(int type = startTypeThread;type < endTypeThread;type++){
-        int neuronSpikeListSize = maxSpikesNeuron * nNeurons[type];
-        synData->spikeListGlobal[type] = (ftype*)((((malloc(sizeof (ftype) * neuronSpikeListSize)))));
-        synData->weightListGlobal[type] = (ftype*)((((malloc(sizeof (ftype) * neuronSpikeListSize)))));
-        cudaMalloc((void**)((((&(synData->spikeListDevice[type]))))), sizeof (ftype) * neuronSpikeListSize);
-        cudaMalloc((void**)((((&(synData->weightListDevice[type]))))), sizeof (ftype) * neuronSpikeListSize);
-        if(type == 0)
-            printf("Spike List size of %.3f MB for each type.\n", sizeof (ftype) * neuronSpikeListSize / 1024. / 1024.);
-
+    if (benchConf.simProcMode == NN_GPU) {
+    	for(int type = startTypeThread;type < endTypeThread;type++){
+    		int neuronSpikeListSize = maxSpikesNeuron * nNeurons[type];
+    		synData->spikeListGlobal[type] = (ftype*)((((malloc(sizeof (ftype) * neuronSpikeListSize)))));
+    		synData->weightListGlobal[type] = (ftype*)((((malloc(sizeof (ftype) * neuronSpikeListSize)))));
+    		cudaMalloc((void**)((((&(synData->spikeListDevice[type]))))), sizeof (ftype) * neuronSpikeListSize);
+    		cudaMalloc((void**)((((&(synData->weightListDevice[type]))))), sizeof (ftype) * neuronSpikeListSize);
+    		if(type == 0)
+    			printf("Spike List size of %.3f MB for each type.\n", sizeof (ftype) * neuronSpikeListSize / 1024. / 1024.);
+    	}
     }
 
     /*--------------------------------------------------------------
@@ -448,7 +453,7 @@ int PerformSimulation::launchExecution() {
 		/*--------------------------------------------------------------
 		 * Used to print spike statistics in the end of the simulation
 		 *--------------------------------------------------------------*/
-		if (benchConf.simCommMode == NN_GPU || tInfo->nProcesses > 1 )
+		if (benchConf.simProcMode == NN_GPU || tInfo->nProcesses > 1 )
 			for (int type=tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
 				for (int c=0; c<nNeurons[type]; c++)
 					sharedData->spkStat->addGeneratedSpikes(type, c, NULL, synData->nGeneratedSpikesHost[type][c]);
@@ -456,9 +461,11 @@ int PerformSimulation::launchExecution() {
 		/*--------------------------------------------------------------
 		 * Copy the Vm from GPUs to the CPU memory
 		 *--------------------------------------------------------------*/
-		if (benchConf.assertResultsAll == 1 || benchConf.printAllVmKernelFinish == 1)
-			for (int type = startTypeThread; type < endTypeThread; type++)
-				cudaMemcpy(synData->vmListHost[type], synData->vmListDevice[type], sizeof(ftype) * nNeurons[type], cudaMemcpyDeviceToHost);
+		if (benchConf.simProcMode == NN_GPU) {
+			if (benchConf.assertResultsAll == 1 || benchConf.printAllVmKernelFinish == 1)
+				for (int type = startTypeThread; type < endTypeThread; type++)
+					cudaMemcpy(synData->vmListHost[type], synData->vmListDevice[type], sizeof(ftype) * nNeurons[type], cudaMemcpyDeviceToHost);
+		}
 
 		/*--------------------------------------------------------------
 		 * Writes Vm to file at the end of each kernel execution
@@ -513,8 +520,10 @@ int PerformSimulation::launchExecution() {
 			if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE || benchConf.simCommMode == NN_CPU)
 				bench.connWrite = gettimeInMilli();
 
-		if (threadNumber == 0 && benchConf.printSampleVms == 1)
-			sharedData->neuronInfoWriter->writeSampleVm(tInfo->kStep);
+		if (benchConf.simProcMode == NN_GPU) {
+			if (threadNumber == 0 && benchConf.printSampleVms == 1)
+				sharedData->neuronInfoWriter->writeSampleVm(tInfo->kStep);
+		}
 
 		if (benchConf.printAllSpikeTimes == 1)
 			if (threadNumber == 0) // Uses only data from SpikeStatistics::addGeneratedSpikes
@@ -542,17 +551,24 @@ int PerformSimulation::launchExecution() {
 		sharedData->spkStat->printSpikeStatistics((const char *)"spikeGpu.dat", sharedData->totalTime, bench, tInfo->startTypeProcess, tInfo->endTypeProcess);
 
 	// TODO: Free CUDA Memory
-	for (int type = startTypeThread; type < endTypeThread; type++) {
-		cudaFree(synData->spikeListDevice[type]);
-		cudaFree(synData->weightListDevice[type]);
-		free(synData->spikeListGlobal[type]);
-		free(synData->weightListGlobal[type]);
+	if (benchConf.simProcMode == NN_GPU) {
+		for (int type = startTypeThread; type < endTypeThread; type++) {
+			cudaFree(synData->spikeListDevice[type]);
+			cudaFree(synData->weightListDevice[type]);
+			free(synData->spikeListGlobal[type]);
+			free(synData->weightListGlobal[type]);
+		}
+
+		if (threadNumber == 0) {
+			delete[] kernelInfo->nBlocksComm;
+			delete[] kernelInfo->nThreadsComm;
+		}
 	}
 
-	if (threadNumber == 0) {
-		delete[] kernelInfo->nBlocksComm;
-		delete[] kernelInfo->nThreadsComm;
-		delete sharedData->neuronInfoWriter;
+	if (benchConf.simProcMode == NN_CPU) {
+		for (int type = startTypeThread; type < endTypeThread; type++)
+			for (int neuron = 0; neuron < nNeurons[type]; neuron++ )
+				sharedData->matrixList[type][neuron].freeMem();
 	}
 
 	printf("Finished GPU execution.\n" );

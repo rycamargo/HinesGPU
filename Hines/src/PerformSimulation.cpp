@@ -194,6 +194,95 @@ void PerformSimulation::mpiAllGatherConnections()
 }
 #endif
 
+#ifdef MPI_GPU_NN
+void PerformSimulation::prepareMpiGeneratedSpikeStructures() {
+
+	SynapticData *synData = sharedData->synData;
+
+	if (benchConf.simProcMode == NN_CPU) {
+
+		synData->genSpikeTimeListHost     = (ftype **) malloc (sizeof(ftype *)  * tInfo->totalTypes);
+		synData->nGeneratedSpikesHost     = (ucomp **) malloc (sizeof(ucomp *)  * tInfo->totalTypes);
+
+		for (int type = 0; type < tInfo->totalTypes; type++) {
+			synData->genSpikeTimeListHost[type] = (ftype *) malloc(sizeof(ftype) * GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type]);
+			synData->nGeneratedSpikesHost[type] = (ucomp *) malloc(sizeof(ucomp) * tInfo->nNeurons[type]);
+		}
+
+		for (int type = tInfo->startTypeProcess; type < tInfo->endTypeProcess; type++) {
+			for(int n = 0; n < tInfo->nNeurons[type];n++)
+				sharedData->matrixList[type][n].redefineGenSpikeTimeList (
+						synData->genSpikeTimeListHost[type] + (GENSPIKETIMELIST_SIZE * n));
+		}
+
+	}
+
+	/**
+	 * The data structures were prepared in the GpuSimulationControl::prepareSynapses method
+	 */
+	else {
+		for (int type = 0; type < tInfo->totalTypes; type++) {
+			if ( type < tInfo->startTypeProcess || tInfo->endTypeProcess <= type ) {
+				synData->genSpikeTimeListHost[type] = (ftype *) malloc(sizeof(ftype) * GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type]);
+				synData->nGeneratedSpikesHost[type] = (ucomp *) malloc(sizeof(ucomp) * tInfo->nNeurons[type]);
+			}
+		}
+	}
+}
+#endif
+
+void PerformSimulation::updateGenSpkStatistics(int *& nNeurons, SynapticData *& synData)
+{
+    /*--------------------------------------------------------------
+		 * Used to print spike statistics in the end of the simulation
+		 *--------------------------------------------------------------*/
+    if (benchConf.simProcMode == NN_GPU)
+			for (int type=tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+				for (int c=0; c<nNeurons[type]; c++)
+					sharedData->spkStat->addGeneratedSpikes(type, c, NULL, synData->nGeneratedSpikesHost[type][c]);
+		else
+			for (int type=tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+				for (int c=0; c<nNeurons[type]; c++)
+					sharedData->spkStat->addGeneratedSpikes(type, c, NULL, sharedData->matrixList[type][c].nGeneratedSpikes);
+}
+
+void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & randomSpkInfo )
+{
+	randomSpkInfo.listSize =
+			3 * sharedData->inputSpikeRate * kernelInfo->nKernelSteps *
+			sharedData->dt * tInfo->nNeurons[type];
+	randomSpkInfo.spikeTimes = new ftype[ randomSpkInfo.listSize ];
+	randomSpkInfo.spikeDest = new int[ randomSpkInfo.listSize ];
+
+	int kernelSteps = kernelInfo->nKernelSteps;
+	ftype dt = sharedData->dt;
+
+	randomSpkInfo.nRandom = 0;
+    for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
+				HinesMatrix & m = sharedData->matrixList[type][neuron];
+
+				if ((tInfo->kStep + kernelSteps)*m.dt > 9.9999 && sharedData->typeList[type] == PYRAMIDAL_CELL) {
+					int32_t spkTime;
+
+					random_r(sharedData->randBuf[tInfo->threadNumber], &spkTime);
+					ftype rate = (sharedData->inputSpikeRate) * (kernelSteps * dt);
+					if (spkTime / (float) RAND_MAX < rate ) {
+						spkTime = (tInfo->kStep + kernelSteps)*dt + (ftype)spkTime/RAND_MAX * (kernelSteps * dt);
+
+						if (benchConf.simCommMode == NN_GPU) {
+							assert(randomSpkInfo.nRandom < randomSpkInfo.listSize);
+							randomSpkInfo.spikeTimes[randomSpkInfo.nRandom] = spkTime;
+							randomSpkInfo.spikeDest[randomSpkInfo.nRandom] = neuron;
+						}
+						randomSpkInfo.nRandom++;
+						if (benchConf.simCommMode == NN_CPU)
+							m.synapticChannels->addSpike(0, spkTime, 1);
+					}
+				}
+			}
+}
+
+
 /*======================================================================================================
  * Performs the execution
  *======================================================================================================*/
@@ -334,39 +423,8 @@ int PerformSimulation::launchExecution() {
 	 * [MPI] Prepare the genSpikeListTime to receive the values from other processes
 	 *--------------------------------------------------------------*/
 #ifdef MPI_GPU_NN
-    if (threadNumber == 0) {
-
-    	if (benchConf.simProcMode == NN_CPU) {
-
-    		synData->genSpikeTimeListHost     = (ftype **) malloc (sizeof(ftype *)  * tInfo->totalTypes);
-    		synData->nGeneratedSpikesHost     = (ucomp **) malloc (sizeof(ucomp *)  * tInfo->totalTypes);
-
-    		for (int type = 0; type < tInfo->totalTypes; type++) {
-    			synData->genSpikeTimeListHost[type] = (ftype *) malloc(sizeof(ftype) * GENSPIKETIMELIST_SIZE * nNeurons[type]);
-    			synData->nGeneratedSpikesHost[type] = (ucomp *) malloc(sizeof(ucomp) * nNeurons[type]);
-    		}
-
-        	for (int type = tInfo->startTypeProcess; type < tInfo->endTypeProcess; type++) {
-        		for(int n = 0; n < nNeurons[type];n++)
-        			sharedData->matrixList[type][n].redefineGenSpikeTimeList (
-        					synData->genSpikeTimeListHost[type] + (GENSPIKETIMELIST_SIZE * n));
-        	}
-
-    	}
-
-    	/**
-    	 * The data structures were prepared in the GpuSimulationControl::prepareSynapses method
-    	 */
-    	else {
-    		for (int type = 0; type < tInfo->totalTypes; type++) {
-    			if ( type < tInfo->startTypeProcess || tInfo->endTypeProcess <= type ) {
-    				synData->genSpikeTimeListHost[type] = (ftype *) malloc(sizeof(ftype) * GENSPIKETIMELIST_SIZE * nNeurons[type]);
-    				synData->nGeneratedSpikesHost[type] = (ucomp *) malloc(sizeof(ucomp) * nNeurons[type]);
-    			}
-    		}
-    	}
-    }
-
+	if (threadNumber == 0)
+		prepareMpiGeneratedSpikeStructures();
 #endif
 
     /*--------------------------------------------------------------
@@ -431,14 +489,10 @@ int PerformSimulation::launchExecution() {
 			bench.connWrite = 0;
 		}
 
-		/*--------------------------------------------------------------
-		 * [MPI] Send the list of generated spikes to other processes
-		 *--------------------------------------------------------------*/
 #ifdef MPI_GPU_NN
 		broadcastGeneratedSpikesMPISync();
 #endif
-
-		if (threadNumber == 0)
+		if(threadNumber == 0)
 			bench.connWait = gettimeInMilli();
 
 		/*--------------------------------------------------------------
@@ -446,17 +500,12 @@ int PerformSimulation::launchExecution() {
 		 * Used only for communication processing in the CPU
 		 *--------------------------------------------------------------*/
 		if (benchConf.simCommMode == NN_CPU) {
-			gpuSimulation->addReceivedSpikesToTargetChannelCPU();
+			cpuSimulation->addReceivedSpikesToTargetChannelCPU();
 			syncCpuThreads();
 		}
 
-		/*--------------------------------------------------------------
-		 * Used to print spike statistics in the end of the simulation
-		 *--------------------------------------------------------------*/
-		if (benchConf.simProcMode == NN_GPU || tInfo->nProcesses > 1 )
-			for (int type=tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
-				for (int c=0; c<nNeurons[type]; c++)
-					sharedData->spkStat->addGeneratedSpikes(type, c, NULL, synData->nGeneratedSpikesHost[type][c]);
+		// Used to print spike statistics in the end of the simulation
+		updateGenSpkStatistics(nNeurons, synData);
 
 		/*--------------------------------------------------------------
 		 * Copy the Vm from GPUs to the CPU memory
@@ -495,25 +544,26 @@ int PerformSimulation::launchExecution() {
 			 *  Generates random spikes for the network
 			 *-------------------------------------------------------*/
 			RandomSpikeInfo randomSpkInfo;
-			randomSpkInfo.listSize = sharedData->inputSpikeRate * nKernelSteps * dt * nNeurons[type] * 3;
-			randomSpkInfo.spikeTimes = new ftype[ randomSpkInfo.listSize ];
-			randomSpkInfo.spikeDest = new int[ randomSpkInfo.listSize ];
-			gpuSimulation->generateRandomSpikes(type, randomSpkInfo);
+			generateRandomSpikes(type, randomSpkInfo);
 
 			/*-------------------------------------------------------
-			 * Perform GPU Communications
+			 * Perform CPU and GPU Communications
 			 *-------------------------------------------------------*/
 			if (benchConf.simCommMode == NN_GPU)
 				gpuSimulation->performGPUCommunications(type, randomSpkInfo);
 
+			else if (benchConf.simCommMode == NN_CPU) {
+				cpuSimulation->performCPUCommunication(type, maxSpikesNeuron, randomSpkInfo.nRandom);
+
+				//Copy synaptic and spike info into the GPU
+			    if (benchConf.simProcMode == NN_GPU && benchConf.simCommMode == NN_CPU) {
+			        int spikeListSizeMax = gpuSimulation->updateSpikeListSizeGlobal(type, maxSpikesNeuron);
+			        gpuSimulation->transferSynapticSpikeInfoToGpu(type, spikeListSizeMax);
+			    }
+			}
+
 			delete []randomSpkInfo.spikeTimes;
 			delete []randomSpkInfo.spikeDest;
-
-			/*-------------------------------------------------------
-			 * Perform CPU Communications
-			 *-------------------------------------------------------*/
-			if (benchConf.simCommMode == NN_CPU)
-				gpuSimulation->performCPUCommunication(type, maxSpikesNeuron, randomSpkInfo.nRandom);
 		}
 
 		if (threadNumber == 0)

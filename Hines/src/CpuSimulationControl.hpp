@@ -29,6 +29,10 @@ public:
 
     void performCpuNeuronalProcessing();
 
+    void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
+    void addReceivedSpikesToTargetChannelCPU();
+
+
 //    void updateSharedDataInfo();
 //    void prepareSynapses();
 //    int  prepareExecution(int type);

@@ -353,70 +353,6 @@ void GpuSimulationControl::transferSynapticSpikeInfoToGpu(int type, int spikeLis
 
 }
 
-void GpuSimulationControl::generateRandomSpikes( int type, RandomSpikeInfo & randomSpkInfo )
-{
-
-	int kernelSteps = kernelInfo->nKernelSteps;
-	ftype dt = sharedData->dt;
-
-	randomSpkInfo.nRandom = 0;
-    for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
-				HinesMatrix & m = sharedData->matrixList[type][neuron];
-
-				if ((tInfo->kStep + kernelSteps)*m.dt > 9.9999 && sharedData->typeList[type] == PYRAMIDAL_CELL) {
-					int32_t spkTime;
-
-					random_r(sharedData->randBuf[tInfo->threadNumber], &spkTime);
-					ftype rate = (sharedData->inputSpikeRate) * (kernelSteps * dt);
-					if (spkTime / (float) RAND_MAX < rate ) {
-						spkTime = (tInfo->kStep + kernelSteps)*dt + (ftype)spkTime/RAND_MAX * (kernelSteps * dt);
-
-						if (benchConf.simCommMode == NN_GPU) {
-							assert(randomSpkInfo.nRandom < randomSpkInfo.listSize);
-							randomSpkInfo.spikeTimes[randomSpkInfo.nRandom] = spkTime;
-							randomSpkInfo.spikeDest[randomSpkInfo.nRandom] = neuron;
-						}
-						randomSpkInfo.nRandom++;
-						if (benchConf.simCommMode == NN_CPU)
-							m.synapticChannels->addSpike(0, spkTime, 1);
-					}
-				}
-			}
-}
-
-void GpuSimulationControl::performCPUCommunication(int type, int maxSpikesNeuron, int nRandom) {
-
-    int totalNumberSpikes = 0;
-
-    for(int neuron = 0;neuron < tInfo->nNeurons[type];neuron++){
-        HinesMatrix & m = sharedData->matrixList[type][neuron];
-
-        /**
-         * Updates the spike list when using CPU communications
-         */
-        if (benchConf.simProcMode == NN_CPU)
-        	m.synapticChannels->updateSpikeList(sharedData->dt * (tInfo->kStep + kernelInfo->nKernelSteps));
-        else
-        	m.synapticChannels->updateSpikeListGpu(sharedData->dt * (tInfo->kStep + kernelInfo->nKernelSteps),
-        			sharedData->synData->spikeListGlobal[type], sharedData->synData->weightListGlobal[type],
-        			maxSpikesNeuron, tInfo->nNeurons[type], neuron, type);
-
-        totalNumberSpikes += m.synapticChannels->spikeListSize;
-
-        // Used to print spike statistics in the end of the simulation
-        sharedData->spkStat->addReceivedSpikes(type, neuron, m.synapticChannels->getAndResetNumberOfAddedSpikes());
-    }
-
-    /**
-     * Copy synaptic and spike info into the GPU
-     */
-    if (benchConf.simProcMode == NN_GPU && benchConf.simCommMode == NN_CPU) {
-        // The max number of spikes delivered to a single neuron
-        int spikeListSizeMax = updateSpikeListSizeGlobal(type, maxSpikesNeuron);
-    	transferSynapticSpikeInfoToGpu(type, spikeListSizeMax);
-    }
-}
-
 void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo) {
 
 	/**
@@ -614,65 +550,6 @@ void GpuSimulationControl::createGpuCommunicationStructures()
 
         kernelInfo->nThreadsComm[destType] = sharedData->connGpuListHost[destType][0].nNeuronsGroup;
     }
-}
-
-void GpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
-{
-
-	cudaThreadSynchronize(); // Used to prevent reads of host memory before the copy
-
-	if( benchConf.simProcMode == NN_CPU && tInfo->nProcesses == 1) {
-
-		for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
-
-			for (int source = 0; source < tInfo->nNeurons[type]; source++) {
-
-				ucomp nGeneratedSpikes = sharedData->matrixList[type][source].nGeneratedSpikes;
-				if (nGeneratedSpikes > 0) {
-					ftype *spikeTimes = sharedData->matrixList[type][source].spikeTimes;
-
-					// Used to print spike statistics in the end of the simulation
-					sharedData->spkStat->addGeneratedSpikes(type, source, spikeTimes, nGeneratedSpikes);
-					std::vector<Conn> & connList = sharedData->connection->getConnArray(source + type*CONN_NEURON_TYPE);
-					for (int conn=0; conn<connList.size(); conn++) {
-						Conn & connStruct = connList[conn];
-						SynapticChannels *targetSynapse = sharedData->matrixList[ connStruct.dest / CONN_NEURON_TYPE ][ connStruct.dest % CONN_NEURON_TYPE ].synapticChannels;
-						targetSynapse->addSpikeList(connStruct.synapse, nGeneratedSpikes, spikeTimes, connStruct.delay, connStruct.weigth);
-					}
-				}
-
-			}
-		}
-	}
-
-	else {
-
-		ConnectionInfo *connInfo = sharedData->connInfo;
-
-		int conn 	= tInfo->threadNumber       * connInfo->nConnections/sharedData->nThreadsCpu;
-		int endConn = (tInfo->threadNumber + 1) * connInfo->nConnections/sharedData->nThreadsCpu;
-		if (tInfo->threadNumber == sharedData->nThreadsCpu-1)
-			endConn = connInfo->nConnections;
-
-		for ( ; conn < endConn; conn++) {
-
-			int dType   = connInfo->dest[conn] / CONN_NEURON_TYPE;
-			if (dType < tInfo->startTypeProcess || dType >= tInfo->endTypeProcess)
-				continue;
-
-			int dNeuron = connInfo->dest[conn]   % CONN_NEURON_TYPE;
-			int sType   = connInfo->source[conn] / CONN_NEURON_TYPE;
-			int sNeuron = connInfo->source[conn] % CONN_NEURON_TYPE;
-
-			ucomp nGeneratedSpikes = sharedData->synData->nGeneratedSpikesHost[sType][sNeuron];
-			if (nGeneratedSpikes > 0) {
-				ftype *spikeTimes = sharedData->synData->genSpikeTimeListHost[sType] + GENSPIKETIMELIST_SIZE * sNeuron;
-
-				SynapticChannels *targetSynapse = sharedData->matrixList[ dType ][ dNeuron ].synapticChannels;
-				targetSynapse->addSpikeList(connInfo->synapse[conn], nGeneratedSpikes, spikeTimes, connInfo->delay[conn], connInfo->weigth[conn]);
-			}
-		}
-	}
 }
 
 void GpuSimulationControl::copyGeneratedSpikeListsToGPU()

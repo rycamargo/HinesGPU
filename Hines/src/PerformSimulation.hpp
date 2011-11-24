@@ -22,22 +22,22 @@ private:
 	KernelInfo *kernelInfo;
 
 public:
-	PerformSimulation(ThreadInfo *tInfo);
+    PerformSimulation(ThreadInfo *tInfo);
     int launchExecution();
     int performHostExecution();
-
 private:
     void syncCpuThreads();
     void updateBenchmark();
-
     void createNeurons();
     void initializeThreadInformation();
+    void updateGenSpkStatistics(int *& nNeurons, SynapticData *& synData);
+    void generateRandomSpikes(int type, RandomSpikeInfo & randomSpkInfo);
 
 #ifdef MPI_GPU_NN
+    void prepareMpiGeneratedSpikeStructures();
     void mpiAllGatherConnections();
     void broadcastGeneratedSpikesMPISync();
 #endif
-
 };
 
 #endif /* PERFORMSIMULATION_H_ */

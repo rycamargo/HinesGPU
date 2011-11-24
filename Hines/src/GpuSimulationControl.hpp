@@ -36,15 +36,11 @@ public:
 
     int  updateSpikeListSizeGlobal(int type, int maxSpikesNeuron);
     void transferSynapticSpikeInfoToGpu(int type, int spikeListSizeMax);
-    void generateRandomSpikes(int type, RandomSpikeInfo & randomSpkInfo);
     void performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo);
     void performGpuNeuronalProcessing();
 
     void copyGeneratedSpikeListsToGPU();
     void readGeneratedSpikesFromGPU();
-
-    void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
-    void addReceivedSpikesToTargetChannelCPU();
 
     void checkVmValues();
 

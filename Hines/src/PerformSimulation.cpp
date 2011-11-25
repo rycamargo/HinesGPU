@@ -556,7 +556,7 @@ int PerformSimulation::launchExecution() {
 				cpuSimulation->performCPUCommunication(type, maxSpikesNeuron, randomSpkInfo.nRandom);
 
 				//Copy synaptic and spike info into the GPU
-			    if (benchConf.simProcMode == NN_GPU && benchConf.simCommMode == NN_CPU) {
+			    if (benchConf.simProcMode == NN_GPU) {
 			        int spikeListSizeMax = gpuSimulation->updateSpikeListSizeGlobal(type, maxSpikesNeuron);
 			        gpuSimulation->transferSynapticSpikeInfoToGpu(type, spikeListSizeMax);
 			    }

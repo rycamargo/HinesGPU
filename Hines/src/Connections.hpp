@@ -83,6 +83,13 @@ public:
 	ConnectionInfo *getConnectionInfo ();
 	void clearMPIConnections(ConnectionInfo *connInfo);
 
+	int connectTypeToTypeRandom(
+			ThreadInfo *tInfo, int sourceType, int destType, ucomp synapse,
+			ftype connRatio, ftype baseW, ftype randW, ftype baseD, ftype randD);
+
+	int connectTypeToTypeOneToOne( ThreadInfo *tInfo,
+			int sourceType, int destType, ucomp synapse, ftype baseW, ftype baseD);
+
 	int connectAssociativeFromFile (char *filename);
 	int connectRandom ( ThreadInfo *tInfo );
 	int createTestConnections ();

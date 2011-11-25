@@ -114,219 +114,176 @@ void generateRandomList(int nNumbers, int *randomNumberList, random_data *randBu
 		random_r( randBuf, &randomNumberList[i] );
 }
 
-int Connections::connectRandom ( ThreadInfo *tInfo ) {
-
-	SharedNeuronGpuData *sharedData = tInfo->sharedData;
-	int *typeList		= sharedData->typeList;
-	int *nNeurons 		= tInfo->nNeurons;
-	int threadNumber 	= tInfo->threadNumber;
+int Connections::connectTypeToTypeRandom( ThreadInfo *tInfo,
+		int sourceType, int destType, ucomp synapse, ftype connRatio,
+		ftype baseW, ftype randW, ftype baseD, ftype randD) {
 
 	int nConnTotal = 0;
-	int nPyramidal  = 0;
-	int nInhibitory = 0;
-	for (int type=0; type < tInfo->totalTypes; type++) {
-		if (typeList[type] == PYRAMIDAL_CELL)
-			nPyramidal += nNeurons[type];
-		else if (typeList[type] == INHIBITORY_CELL)
-			nInhibitory += nNeurons[type];
-	}
 
-	int randomListPos=0;
-	int nRandom = 10000; //nPyramidal * nPyramidal * pyrRatio;
+	int nDestTypeNeurons = 0;
+	for (int type=0; type < tInfo->totalTypes; type++)
+		if (tInfo->sharedData->typeList[type] == destType)
+			nDestTypeNeurons += tInfo->nNeurons[type];
+
+	int randomListPos = 0;
+	int nRandom = nDestTypeNeurons * nDestTypeNeurons * connRatio * 1.2;
 	int *randomNumberList = (int *)malloc( sizeof(int) * nRandom);
-	generateRandomList(nRandom, randomNumberList, sharedData->randBuf[threadNumber]);
+	random_data *randBuff = tInfo->sharedData->randBuf[tInfo->threadNumber];
+	generateRandomList(nRandom, randomNumberList, randBuff);
 
 	/**
 	 * Connects the pyramidal-pyramidal cells
 	 */
-	int *randomConnectionList = (int *)malloc( sizeof(int) * (nPyramidal + 1) );
+	int *randomConnectionList = (int *)malloc( sizeof(int) * (nDestTypeNeurons + 1) );
 
-	for (int sType=tInfo->startTypeProcess; sType < tInfo->endTypeProcess; sType++) {
+	for (int type=tInfo->startTypeProcess; type < tInfo->endTypeProcess; type++) {
 
-		if (typeList[sType] == INHIBITORY_CELL) continue;
+		if (tInfo->sharedData->typeList[type] != sourceType) continue;
 
+		for (int sNeuron=0; sNeuron < tInfo->nNeurons[type]; sNeuron++) {
 
-		for (int sNeuron=0; sNeuron < nNeurons[sType]; sNeuron++) {
+			for (int i =0; i < nDestTypeNeurons; i++ )
+				randomConnectionList[i] = 0;
+			randomConnectionList[nDestTypeNeurons] = 1; // used only for control
 
 			/**
-			 * Connects to a random neuron k times
+			 * Connects to a random neuron nDestTypeNeurons*connRatio times
 			 */
-			for (int i =0; i < nPyramidal; i++ )
-				randomConnectionList[i] = 0;
-			randomConnectionList[nPyramidal] = 1; // used only for control
-
-			for (int c=0; c < nPyramidal * sharedData->pyrConnRatio; c++) {
+			for (int c=0; c < nDestTypeNeurons * connRatio; c++) {
 
 				Conn conn1;
-				conn1.synapse = 0;
+				conn1.synapse = synapse;
 
 				int32_t wei;
-				random_r( sharedData->randBuf[threadNumber], &wei );
-				conn1.weigth = sharedData->excWeight * (0.5 + ((ftype)wei)/RAND_MAX);
-				//conn1->weigth = sharedData->excWeight;
+				random_r( randBuff, &wei );
+				conn1.weigth = baseW * (randW + ((ftype)wei)/RAND_MAX); // randW = 0.5
 
 				int32_t del;
-				random_r( sharedData->randBuf[threadNumber], &del );
-				conn1.delay = 10 + 10.*((ftype)del)/RAND_MAX;
-				//conn1->delay = 10;
+				random_r( randBuff, &del );
+				conn1.delay = baseD + randD*((ftype)del)/RAND_MAX; // baseD = 10, randD = 10
 
-				conn1.dest = nPyramidal;
+				// Finds a target that did not receive any connection
+				conn1.dest = nDestTypeNeurons;
 				while(randomConnectionList[conn1.dest] != 0) {
-					conn1.dest = randomNumberList[randomListPos++] % nPyramidal;
+					conn1.dest = randomNumberList[randomListPos++] % nDestTypeNeurons;
 					if (randomListPos == nRandom) {
-						generateRandomList(nRandom, randomNumberList, sharedData->randBuf[threadNumber]);
+						generateRandomList(nRandom, randomNumberList, randBuff);
 						randomListPos = 0;
 					}
 				}
 				randomConnectionList[conn1.dest] = 1;
 
-				assert (0 <= conn1.dest && conn1.dest < nPyramidal);
+				assert (0 <= conn1.dest && conn1.dest < nDestTypeNeurons);
 
-
+				// Transform the connection to the type CONN_NEURON_TYPE*dType + neuron
 				int count = 0;
 				for (int dType=0; dType < tInfo->totalTypes; dType++) {
 
-					if (typeList[dType] == INHIBITORY_CELL) continue;
+					if (tInfo->sharedData->typeList[dType] != destType) continue;
 
-					if (conn1.dest < count + nNeurons[dType]) {
+					if (conn1.dest < count + tInfo->nNeurons[dType]) {
 						conn1.dest = CONN_NEURON_TYPE*dType + (conn1.dest-count);
 						break;
 					}
 					else
-						count += nNeurons[dType];
+						count += tInfo->nNeurons[dType];
 				}
+
+				connMap[CONN_NEURON_TYPE*type + sNeuron].push_back(conn1);
+				nConnTotal++;
+			}
+		}
+	}
+	free (randomConnectionList);
+	free(randomNumberList);
+
+	return nConnTotal;
+}
+
+int Connections::connectTypeToTypeOneToOne( ThreadInfo *tInfo,
+		int sourceType, int destType, ucomp synapse, ftype baseW, ftype baseD) {
+
+	int nConnTotal = 0;
+
+	// Checks the number of inhibitory neurons in the previous processes
+	int pyrNeuron = 0;
+	for (int sType=0; sType < tInfo->startTypeProcess; sType++)
+		if (tInfo->sharedData->typeList[sType] == INHIBITORY_CELL)
+			pyrNeuron += tInfo->nNeurons[sType];
+
+	if (tInfo->sharedData->inhConnRatio > 0) {
+		for (int sType=tInfo->startTypeProcess; sType < tInfo->endTypeProcess; sType++) {
+
+			if (tInfo->sharedData->typeList[sType] == PYRAMIDAL_CELL) continue;
+
+			for (int sNeuron=0; sNeuron < tInfo->nNeurons[sType]; sNeuron++, pyrNeuron++) {
+
+				Conn conn1;
+				conn1.synapse = synapse; // inhibitory
+				conn1.weigth = baseW;
+				conn1.delay  = baseD;
+
+				conn1.dest = pyrNeuron;
+				int count = 0;
+				for (int dType=0; dType < tInfo->totalTypes; dType++) {
+
+					if (tInfo->sharedData->typeList[dType] == INHIBITORY_CELL) continue;
+
+					if (conn1.dest < count + tInfo->nNeurons[dType]) {
+						conn1.dest = CONN_NEURON_TYPE*dType + (conn1.dest-count);
+						break;
+					}
+					else
+						count += tInfo->nNeurons[dType];
+				}
+
 
 				connMap[CONN_NEURON_TYPE*sType + sNeuron].push_back(conn1);
 				nConnTotal++;
 			}
 		}
 	}
-	free (randomConnectionList);
+
+	return nConnTotal;
+}
+
+
+int Connections::connectRandom ( ThreadInfo *tInfo ) {
+
+	SharedNeuronGpuData *sharedData = tInfo->sharedData;
+
+	int nConnTotal = 0;
+
+	/**
+	 * Connects the pyramidal-pyramidal cells
+	 */
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, PYRAMIDAL_CELL, PYRAMIDAL_CELL, 0, sharedData->pyrConnRatio,
+			sharedData->excWeight, 0.5, 10, 10);
 
 	/**
 	 * Connects the pyramidal-inhibitory cells
 	 */
-	randomConnectionList = (int *)malloc( sizeof(int) * (nInhibitory + 1) );
-	for (int sType=tInfo->startTypeProcess; sType < tInfo->endTypeProcess; sType++) {
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio/10,
+			sharedData->pyrInhWeight*4, 0.5, 10, 10);
 
-		if (typeList[sType] == INHIBITORY_CELL) continue;
-
-		for (int sNeuron=0; sNeuron < nNeurons[sType]; sNeuron++) {
-
-			/**
-			 * Connects to a random neuron k times
-			 */
-			for (int i =0; i < nInhibitory; i++ )
-				randomConnectionList[i] = 0;
-			randomConnectionList[nInhibitory] = 1; // used only for control
-
-			for (int c=0; c < nInhibitory * sharedData->inhConnRatio; c++) {
-
-				Conn conn1;
-				conn1.synapse = 0;
-
-				int32_t wei;
-				random_r( sharedData->randBuf[threadNumber], &wei );
-				conn1.weigth = sharedData->pyrInhWeight * (0.5 + ((ftype)wei)/RAND_MAX);
-				//conn1->weigth = sharedData->pyrInhWeight;
-
-				int32_t del;
-				random_r( sharedData->randBuf[threadNumber], &del );
-				conn1.delay = 10 + ((ftype)del)/RAND_MAX;
-				//conn1->delay = 10;
-
-				conn1.dest = nInhibitory;
-				while(randomConnectionList[conn1.dest] != 0) {
-					conn1.dest = randomNumberList[randomListPos++] % nInhibitory;
-					if (randomListPos == nRandom) {
-						generateRandomList(nRandom, randomNumberList, sharedData->randBuf[threadNumber]);
-						randomListPos = 0;
-					}
-				}
-				randomConnectionList[conn1.dest] = 1;
-
-				assert (0 <= conn1.dest && conn1.dest < nInhibitory);
-
-				//------------
-//				int32_t pos;
-//				random_r( sharedData->randBuf[threadNumber], &pos );
-//				conn1.dest = pos % nInhibitory;
-				//------------
-
-				int count = 0;
-				for (int dType=0; dType < tInfo->totalTypes; dType++) {
-
-					if (typeList[dType] == PYRAMIDAL_CELL) continue;
-
-					if (conn1.dest < count + nNeurons[dType] ) {
-						conn1.dest = CONN_NEURON_TYPE*dType + (0.5 + (conn1.dest-count));
-						break;
-					}
-					else
-						count += nNeurons[dType];
-				}
-
-
-				connMap[CONN_NEURON_TYPE*sType + sNeuron].push_back(conn1);
-				nConnTotal++;
-			}
-
-		}
-	}
-	free (randomConnectionList);
+//	nConnTotal += connectTypeToTypeRandom(
+//			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio,
+//			sharedData->pyrInhWeight, 0.5, 10, 10);
 
 	/**
 	 * Connects the inhibitory-pyramidal cells
-	 * Each pyramidal cell connects to a single inhibitory neuron
+	 * Each inhibitory cell connects to a single pyramidal neuron
 	 */
-	// Checks the number of inhibitory neurons in the previous processes
-	int inhNeuron = 0;
-	for (int sType=0; sType < tInfo->startTypeProcess; sType++)
-		if (typeList[sType] == INHIBITORY_CELL)
-			inhNeuron += nNeurons[sType];
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhConnRatio/10,
+			sharedData->inhPyrWeight/10, 0.5, 10, 10);
 
-	if (sharedData->inhConnRatio > 0) {
-		for (int sType=tInfo->startTypeProcess; sType < tInfo->endTypeProcess; sType++) {
+//	nConnTotal += connectTypeToTypeOneToOne(
+//			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1,
+//			tInfo->sharedData->inhPyrWeight, 10);
 
-			if (typeList[sType] == PYRAMIDAL_CELL) continue;
-
-			for (int sNeuron=0; sNeuron < nNeurons[sType]; sNeuron++, inhNeuron++) {
-
-				Conn conn1;
-				conn1.synapse = 1; // inhibitory
-
-				//int32_t wei;
-				//random_r( sharedData->randBuf[threadNumber], &wei );
-				//conn1->weigth = sharedData->inhPyrWeight * ((ftype)wei)/RAND_MAX;
-				conn1.weigth = sharedData->inhPyrWeight;
-
-				int32_t del;
-				random_r( sharedData->randBuf[threadNumber], &del );
-				conn1.delay = 10 + ((ftype)del)/RAND_MAX;
-				//conn1->delay = 10;
-
-				conn1.dest = inhNeuron;
-				int count = 0;
-				for (int dType=0; dType < tInfo->totalTypes; dType++) {
-
-					if (typeList[dType] == INHIBITORY_CELL) continue;
-
-					if (conn1.dest < count + nNeurons[dType]) {
-						conn1.dest = CONN_NEURON_TYPE*dType + (conn1.dest-count);
-						break;
-					}
-					else
-						count += nNeurons[dType];
-				}
-
-
-				connMap[CONN_NEURON_TYPE*sType + sNeuron].push_back(conn1);
-				nConnTotal++;
-			}
-		}
-	}
-
-	free(randomNumberList);
 	printf("Total number of connections = %d.\n", nConnTotal);
 
 	return 0;

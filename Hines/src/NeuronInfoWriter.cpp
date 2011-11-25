@@ -95,11 +95,11 @@ void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nCom
 	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio, tInfo->sharedData->inhConnRatio);
 
 	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu \
-			meanGenSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f] meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f] \
+			meanGenSpikes[T|P|I|B]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] \
 			inpRate=%-5.3f pyrRatio=%-5.3f inhRatio=%-5.3f nKernelSteps=%d\n",
 			mode, nNeuronsTotal, tInfo->totalTypes, nComp, sharedData->nThreadsCpu, sizeof(ftype),
-			bench.meanGenSpikes, bench.meanGenPyrSpikes, bench.meanGenInhSpikes,
-			bench.meanRecSpikes, bench.meanRecPyrSpikes, bench.meanRecInhSpikes,
+			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL],
+			bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL],
 			tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio,
 			tInfo->sharedData->inhConnRatio, kernelInfo->nKernelSteps);
 	fprintf (resultFile, "Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);

@@ -9,7 +9,7 @@ rm testDir -rf
 mkdir testDir
 
 neurons=2000
-seed=4
+seed=6
 type=n1l
 
 #

@@ -77,10 +77,8 @@ struct BenchTimes {
 	//-----------------------------------
 	ftype meanGenSpikes;
 	ftype meanRecSpikes;
-	ftype meanGenPyrSpikes;
-	ftype meanRecPyrSpikes;
-	ftype meanGenInhSpikes;
-	ftype meanRecInhSpikes;
+	ftype *meanGenSpikesType;
+	ftype *meanRecSpikesType;
 };
 
 extern "C" {

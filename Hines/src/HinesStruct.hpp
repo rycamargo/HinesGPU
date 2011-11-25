@@ -230,6 +230,7 @@ typedef struct {
 
 	int kStep;
 
+	int nTypes;
 	int totalTypes;
 	int totalTypesProcess;
 	int *typeProcess; // The rank of the process assigned to that type

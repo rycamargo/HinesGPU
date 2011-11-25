@@ -19,6 +19,7 @@ using namespace std;
 
 #define PYRAMIDAL_CELL 0
 #define INHIBITORY_CELL 1
+#define BASKET_CELL 2
 
 class HinesMatrix {
 

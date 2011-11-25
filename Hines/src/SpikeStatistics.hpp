@@ -18,11 +18,12 @@ class SpikeStatistics {
 
 	int *nNeurons;
 	int *typeList;
-	int nTypes;
+	int totalTypes;
 
 	int totalNeurons;
-	int pyrNeurons;
-	int inhNeurons;
+
+	int nNeuronTypes;
+	int *totalNeuronsType;
 
 	ftype **totalGeneratedSpikes;
 	ftype **totalReceivedSpikes;
@@ -30,7 +31,7 @@ class SpikeStatistics {
 	ftype **lastGeneratedSpikeTimes;
 
 public:
-	SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int startTypeProcess, int endTypeProcess);
+	SpikeStatistics(int *nNeurons, int nNeuronTypes, int totalTypes, int *typeList, int startTypeProcess, int endTypeProcess);
 	virtual ~SpikeStatistics();
 
 	void addGeneratedSpikes(int type, int neuron, ftype *spikeTimes, int nSpikes);

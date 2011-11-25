@@ -207,7 +207,7 @@ int Connections::connectTypeToTypeRandom( ThreadInfo *tInfo,
 				conn1.weigth = baseW * (randW + ((ftype)randVal)/RAND_MAX);
 
 				random_r( randBuff, &randVal );
-				conn1.delay = baseD + randD*((ftype)randVal)/RAND_MAX;
+				conn1.delay = baseD + randD * ((ftype)randVal)/RAND_MAX;
 
 				// Finds a target that did not receive any connection
 				random_r( randBuff, &randVal );
@@ -285,25 +285,26 @@ int Connections::connectRandom ( ThreadInfo *tInfo ) {
 	/**
 	 * Connects the pyramidal-inhibitory cells
 	 */
-//	nConnTotal += connectTypeToTypeRandom(
-//			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio/10,
-//			sharedData->pyrInhWeight*4, 0.5, 10, 10);
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio/10,
+			sharedData->pyrInhWeight*4, 0.5, 10, 10);
+
 
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio,
+			tInfo, PYRAMIDAL_CELL, BASKET_CELL, 0, sharedData->inhConnRatio,
 			sharedData->pyrInhWeight, 0.5, 10, 10);
 
 	/**
 	 * Connects the inhibitory-pyramidal cells
 	 * Each inhibitory cell connects to a single pyramidal neuron
 	 */
-//	nConnTotal += connectTypeToTypeRandom(
-//			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhConnRatio/10,
-//			sharedData->inhPyrWeight/10, 0.5, 10, 10);
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhConnRatio/10,
+			sharedData->inhPyrWeight/20, 0.5, 10, 10);
 
 	nConnTotal += connectTypeToTypeOneToOne(
-			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1,
-			tInfo->sharedData->inhPyrWeight, 10);
+			tInfo, BASKET_CELL, PYRAMIDAL_CELL, 1,
+			tInfo->sharedData->inhPyrWeight/2, 10);
 
 	printf("Total number of connections = %d.\n", nConnTotal);
 

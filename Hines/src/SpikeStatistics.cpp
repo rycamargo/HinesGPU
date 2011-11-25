@@ -10,20 +10,21 @@
 
 #include <cstdio>
 
-SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int startTypeProcess, int endTypeProcess) {
+SpikeStatistics::SpikeStatistics(int *nNeurons, int nNeuronTypes, int totalTypes, int *typeList, int startTypeProcess, int endTypeProcess) {
 
     nSpkfile = 0;
     lastSpkfile = 0;
 
-	this->typeList = typeList;
-	this->nNeurons = nNeurons;
-	this->nTypes   = nTypes;
+	this->typeList     = typeList;
+	this->totalTypes   = totalTypes;
+	this->nNeurons     = nNeurons;
+	this->nNeuronTypes = nNeuronTypes;
 
-	totalGeneratedSpikes = new ftype *[nTypes];
-	totalReceivedSpikes  = new ftype *[nTypes];
-	lastGeneratedSpikeTimes = new ftype *[nTypes];
+	totalGeneratedSpikes = new ftype *[totalTypes];
+	totalReceivedSpikes  = new ftype *[totalTypes];
+	lastGeneratedSpikeTimes = new ftype *[totalTypes];
 
-	for (int type=0; type<nTypes; type++) {
+	for (int type=0; type<totalTypes; type++) {
 		totalGeneratedSpikes[type] = new ftype[nNeurons[type]];
 		totalReceivedSpikes[type]  = new ftype[nNeurons[type]];
 		lastGeneratedSpikeTimes[type] = new ftype[nNeurons[type]];
@@ -36,15 +37,19 @@ SpikeStatistics::SpikeStatistics(int *nNeurons, int nTypes, int *typeList, int s
 	}
 
 	totalNeurons = 0;
-	pyrNeurons = 0;
-	inhNeurons = 0;
-	for (int type=startTypeProcess; type<endTypeProcess; type++) {
 
-		totalNeurons += nNeurons[type];
-		if (typeList[type] == PYRAMIDAL_CELL)
-			pyrNeurons += nNeurons[type];
-		else if (typeList[type] == INHIBITORY_CELL)
-			inhNeurons += nNeurons[type];
+	bench.meanGenSpikesType = new ftype[nNeuronTypes];
+	bench.meanRecSpikesType = new ftype[nNeuronTypes];
+	this->totalNeuronsType  = new int[nNeuronTypes];
+	for (int neuronType=0; neuronType<this->nNeuronTypes; neuronType++) {
+		totalNeuronsType[neuronType]    = 0;
+		bench.meanGenSpikesType[neuronType] = 0;
+		bench.meanRecSpikesType[neuronType] = 0;
+	}
+
+	for (int groupType=startTypeProcess; groupType<endTypeProcess; groupType++) {
+		totalNeurons += nNeurons[groupType];
+		totalNeuronsType[ typeList[groupType] ] += nNeurons[ groupType ];
 	}
 
 }
@@ -75,7 +80,7 @@ void SpikeStatistics::printKernelSpikeStatistics( ftype currentTime) {
     if (lastSpkfile == 0)
     	lastSpkfile = fopen("lastSpikeKernel.dat", "w");
 
-	for (int type=0; type<nTypes; type++) {
+	for (int type=0; type<totalTypes; type++) {
 		fprintf(nSpkfile,	"%-10.2f\ttype=%d | ", currentTime, type);
 		fprintf(lastSpkfile,"%-10.2f\ttype=%d | ", currentTime, type);
 
@@ -98,17 +103,12 @@ void SpikeStatistics::printSpikeStatistics(const char *filename, ftype currentTi
 //	ftype genSpikes = 0;
 //	ftype recSpikes = 0;
 
-	bench.meanGenSpikes    = 0;
-	bench.meanRecSpikes    = 0;
-	bench.meanGenPyrSpikes = 0;
-	bench.meanRecPyrSpikes = 0;
-	bench.meanGenInhSpikes = 0;
-	bench.meanRecInhSpikes = 0;
 
 	FILE *outFile = fopen(filename, "w");
-	fprintf(outFile, "# totalTime=%f, totalNeurons=%d, nTypes=%d\n", currentTime, totalNeurons, nTypes);
+	fprintf(outFile, "# totalTime=%f, totalNeurons=%d, nTypes=%d\n", currentTime, totalNeurons, totalTypes);
 
 	for (int type=startTypeProcess; type<endTypeProcess; type++) {
+
 		for (int neuron=0; neuron < nNeurons[type]; neuron++) {
 
 			bench.meanGenSpikes += totalGeneratedSpikes[type][neuron];
@@ -119,30 +119,24 @@ void SpikeStatistics::printSpikeStatistics(const char *filename, ftype currentTi
 					totalReceivedSpikes[type][neuron], lastGeneratedSpikeTimes[type][neuron]);
 		}
 
-		if (typeList[type] == PYRAMIDAL_CELL)
-			for (int neuron=0; neuron < nNeurons[type]; neuron++) {
-				bench.meanGenPyrSpikes += totalGeneratedSpikes[type][neuron];
-				bench.meanRecPyrSpikes += totalReceivedSpikes[type][neuron];
-			}
-		else if (typeList[type] == INHIBITORY_CELL)
-			for (int neuron=0; neuron < nNeurons[type]; neuron++) {
-				bench.meanGenInhSpikes += totalGeneratedSpikes[type][neuron];
-				bench.meanRecInhSpikes += totalReceivedSpikes[type][neuron];
-			}
+		for (int neuron=0; neuron < nNeurons[type]; neuron++) {
+			bench.meanGenSpikesType[typeList[type]] += totalGeneratedSpikes[type][neuron];
+			bench.meanRecSpikesType[typeList[type]] += totalReceivedSpikes[type][neuron];
+		}
 
 	}
 
 	bench.meanGenSpikes /= totalNeurons;
 	bench.meanRecSpikes /= totalNeurons;
-	bench.meanGenPyrSpikes /= pyrNeurons;
-	bench.meanRecPyrSpikes /= pyrNeurons;
-	bench.meanGenInhSpikes /= inhNeurons;
-	bench.meanRecInhSpikes /= inhNeurons;
 
+	for (int neuronType=0; neuronType < this->nNeuronTypes; neuronType++) {
+		bench.meanGenSpikesType[neuronType] /= totalNeuronsType[neuronType];
+		bench.meanRecSpikesType[neuronType] /= totalNeuronsType[neuronType];
+	}
 
-	printf("meanGenSpikes[T|P|I]=[%3.2f|%3.2f|%3.2f]\nmeanRecSpikes[T|P|I]=[%5.2f|%5.2f|%5.2f]\n",
-			bench.meanGenSpikes, bench.meanGenPyrSpikes, bench.meanGenInhSpikes,
-			bench.meanRecSpikes, bench.meanRecPyrSpikes, bench.meanRecInhSpikes);
+	printf("meanGenSpikes[T|P|I|B]=[%3.2f|%3.2f|%3.2f|%3.2f]\nmeanRecSpikes[T|P|I|B]=[%5.2f|%5.2f|%5.2f|%5.2f]\n",
+			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL],
+			bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL]);
 
 	fclose(outFile);
 }

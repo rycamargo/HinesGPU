@@ -672,7 +672,7 @@ void GpuSimulationControl::updateSharedDataInfo()
     sharedData->synData->spikeListDevice = 0;
     sharedData->synData->totalTypes = tInfo->totalTypes;
     sharedData->neuronInfoWriter = new NeuronInfoWriter(tInfo);
-    sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->totalTypes, tInfo->sharedData->typeList, tInfo->startTypeProcess, tInfo->endTypeProcess);
+    sharedData->spkStat = new SpikeStatistics(tInfo->nNeurons, tInfo->nTypes, tInfo->totalTypes, tInfo->sharedData->typeList, tInfo->startTypeProcess, tInfo->endTypeProcess);
     kernelInfo->nThreadsComm = new int[tInfo->totalTypes];
     kernelInfo->nBlocksComm = new int[tInfo->totalTypes];
     kernelInfo->nBlocksProc = new int[tInfo->totalTypes];

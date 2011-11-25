@@ -9,6 +9,8 @@
 #include <cmath>
 #include <cstdio>
 
+#define PYR_M_ALPHA (V != 25.0) ? (0.1 * (25 - V)) / ( expf( 0.1 * (25-V) ) - 1 ) : 1
+
 ActiveChannels::ActiveChannels(ftype dt_, int nActiveComp_, ucomp *activeCompList_, ftype *vmListNeuron_) {
 
 	dt = dt_;
@@ -41,7 +43,6 @@ ActiveChannels::~ActiveChannels() {
 	delete[] compList;
 }
 
-
 void ActiveChannels::evaluateCurrents( ) {
 
 	evaluateGates();
@@ -54,6 +55,8 @@ void ActiveChannels::evaluateCurrents( ) {
 		gKChannel[i]  =  gKBar[i] * n[i] * n[i] * n[i] * n[i];
 	}
 }
+
+
 
 /**
  * Find the gate openings in the next time step

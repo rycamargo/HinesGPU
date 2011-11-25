@@ -18,12 +18,20 @@ private:
 	FILE *vmKernelFile;
 	FILE *resultFile;
 
+	int *groupList;
+	int *neuronList;
+
 public:
 	NeuronInfoWriter(ThreadInfo *tInfo);
 	~NeuronInfoWriter();
 
+	//void setMonitoredList( int nMonitored, int *groupList, int *neuronList );
+
     void writeVmToFile(int kStep);
+
+    void updateSampleVm(int kStep);
     void writeSampleVm(int kStep);
+
     void writeResultsToFile(char mode, int nNeuronsTotal, int nComp, BenchTimes & bench);
 };
 

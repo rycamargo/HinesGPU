@@ -308,10 +308,8 @@ int PerformSimulation::launchExecution() {
     int endTypeThread = tInfo->endTypeThread;
     int threadNumber = tInfo->threadNumber;
 
-    pthread_mutex_lock(sharedData->mutex);
-    if(sharedData->hList == 0)
+    if(threadNumber == 0)
     	gpuSimulation->updateSharedDataInfo();
-    pthread_mutex_unlock(sharedData->mutex);
 
     //Synchronize threads before starting
     syncCpuThreads();
@@ -570,10 +568,8 @@ int PerformSimulation::launchExecution() {
 			if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE || benchConf.simCommMode == NN_CPU)
 				bench.connWrite = gettimeInMilli();
 
-		if (benchConf.simProcMode == NN_GPU) {
-			if (threadNumber == 0 && benchConf.printSampleVms == 1)
-				sharedData->neuronInfoWriter->writeSampleVm(tInfo->kStep);
-		}
+		if (threadNumber == 0 && benchConf.printSampleVms == 1)
+			sharedData->neuronInfoWriter->writeSampleVm(tInfo->kStep);
 
 		if (benchConf.printAllSpikeTimes == 1)
 			if (threadNumber == 0) // Uses only data from SpikeStatistics::addGeneratedSpikes

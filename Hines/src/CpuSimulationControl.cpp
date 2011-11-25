@@ -22,28 +22,37 @@ CpuSimulationControl::CpuSimulationControl(ThreadInfo *tInfo) {
 
 void CpuSimulationControl::performCpuNeuronalProcessing() {
 
-	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
+	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+		for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++)
+			sharedData->matrixList[type][neuron].nGeneratedSpikes = 0;
 
-		int nNeurons = tInfo->nNeurons[type];
+	/**
+	 * Runs the simulation for kernelSteps
+	 */
+	for (int s=0; s < kernelInfo->nKernelSteps; s++) {
 
-		for (int neuron = 0; neuron < nNeurons; neuron++) {
+		for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+			for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++)
+				sharedData->matrixList[type][neuron].solveMatrix();
 
-			HinesMatrix & m = sharedData->matrixList[type][neuron];
+		if (tInfo->threadNumber == 0 && benchConf.printSampleVms == 1)
+			sharedData->neuronInfoWriter->updateSampleVm(tInfo->kStep + s);
+	}
 
-			/**
-			 * Runs the simulation for kernelSteps for a single neuron
-			 */
-			m.nGeneratedSpikes = 0;
-			for (int s=0; s < kernelInfo->nKernelSteps; s++)
-				m.solveMatrix();
+
 
 #ifdef MPI_GPU_NN
-			sharedData->synData->nGeneratedSpikesHost[type][neuron] = m.nGeneratedSpikes;
+	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+		for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++)
+			sharedData->synData->nGeneratedSpikesHost[type][neuron] =
+					sharedData->matrixList[type][neuron].nGeneratedSpikes;
 #endif
 
-			/**
-			 * Check if Vm is ok for all neurons
-			 */
+	/**
+	 * Check if Vm is ok for all neurons
+	 */
+	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+		for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
 			if (benchConf.assertResultsAll == 1) {
 				HinesMatrix & m = sharedData->matrixList[type][neuron];
 				if ( m.vmList[m.nComp-1] < -500 || 500 < m.vmList[m.nComp-1] ) {
@@ -53,7 +62,7 @@ void CpuSimulationControl::performCpuNeuronalProcessing() {
 			}
 
 		}
-	}
+
 }
 
 void CpuSimulationControl::performCPUCommunication(int type, int maxSpikesNeuron, int nRandom) {

@@ -33,6 +33,17 @@ NeuronInfoWriter::NeuronInfoWriter(ThreadInfo *tInfo) {
     for(int k = 0;k < nVmTimeSeries;k++)
     	this->vmTimeSerie[k] = (ftype*)(((malloc(vmTimeSerieMemSize))));
 
+    groupList  = (int *)malloc(sizeof(int)*nVmTimeSeries);
+    neuronList = (int *)malloc(sizeof(int)*nVmTimeSeries);
+    groupList[0]  = tInfo->startTypeThread;
+    neuronList[0] = 0;
+    groupList[1]  = tInfo->startTypeThread;
+    neuronList[1] = 1;
+    groupList[2]  = tInfo->startTypeThread+1;
+    neuronList[2] = 2;
+    groupList[3]  = tInfo->startTypeThread+1;
+    neuronList[3] = 3;
+
 }
 
 NeuronInfoWriter::~NeuronInfoWriter () {
@@ -47,6 +58,9 @@ NeuronInfoWriter::~NeuronInfoWriter () {
 
 }
 
+//void NeuronInfoWriter::setMonitoredList( int nMonitored, int *groupList, int *neuronList ) {
+//}
+
 void NeuronInfoWriter::writeVmToFile(int kStep) {
 
     for(int type = tInfo->startTypeProcess; type < tInfo->endTypeProcess;type++){
@@ -58,33 +72,30 @@ void NeuronInfoWriter::writeVmToFile(int kStep) {
     }
 }
 
+void NeuronInfoWriter::updateSampleVm(int kStep) {
+
+	int pos = kStep % kernelInfo->nKernelSteps;
+	HinesMatrix **matrixList = tInfo->sharedData->matrixList;
+    for(int k = 0; k < nVmTimeSeries;k++)
+    	vmTimeSerie[k][pos] = matrixList[ groupList[k] ][ neuronList[k] ].vmList[0];
+
+}
+
 void NeuronInfoWriter::writeSampleVm(int kStep)
 {
     if(benchConf.verbose == 1)
         printf("Writing Sample Vms thread=%d\n", tInfo->threadNumber);
 
-    int t1 = tInfo->startTypeThread, n1 = 0;
-    if(tInfo->startTypeThread <= t1 && t1 < tInfo->endTypeThread)
-        cudaMemcpy(vmTimeSerie[0], sharedData->hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
-
-    t1 = tInfo->startTypeThread;
-    n1 = 1; //2291;
-    if(tInfo->startTypeThread <= t1 && t1 < tInfo->endTypeThread)
-        cudaMemcpy(vmTimeSerie[1], sharedData->hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
-
-    t1 = tInfo->endTypeThread - 1;
-    n1 = 2; //135;
-    if(tInfo->startTypeThread <= t1 && t1 < tInfo->endTypeThread)
-        cudaMemcpy(vmTimeSerie[2], sharedData->hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
-
-    t1 = tInfo->endTypeThread - 1;
-    n1 = 3; //1203;
-    if(tInfo->startTypeThread <= t1 && t1 < tInfo->endTypeThread)
-        cudaMemcpy(vmTimeSerie[3], sharedData->hList[t1][n1].vmTimeSerie, vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
-
-    for(int i = kStep;i < kStep + kernelInfo->nKernelSteps; i++){
-        fprintf(outFile, "%10.2f\t%10.2f\t%10.2f\t%10.2f\t%10.2f\n", sharedData->dt * (i + 1), vmTimeSerie[0][(i - kStep)], vmTimeSerie[1][(i - kStep)], vmTimeSerie[2][(i - kStep)], vmTimeSerie[3][(i - kStep)]);
+    if (benchConf.simProcMode == NN_GPU) {
+    	for(int k = 0; k < nVmTimeSeries; k++)
+    		if(tInfo->startTypeThread <= groupList[k] && groupList[k] < tInfo->endTypeThread)
+    			cudaMemcpy(vmTimeSerie[k], sharedData->hList[ groupList[k] ][ neuronList[k] ].vmTimeSerie,
+    					vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
     }
+
+	for(int i = kStep;i < kStep + kernelInfo->nKernelSteps; i++)
+		fprintf(outFile, "%10.2f\t%10.2f\t%10.2f\t%10.2f\t%10.2f\n", sharedData->dt * (i + 1),
+			vmTimeSerie[0][i-kStep], vmTimeSerie[1][i-kStep], vmTimeSerie[2][i - kStep], vmTimeSerie[3][i - kStep]);
 }
 
 void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nComp,

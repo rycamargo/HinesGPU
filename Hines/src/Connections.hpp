@@ -83,6 +83,8 @@ public:
 	ConnectionInfo *getConnectionInfo ();
 	void clearMPIConnections(ConnectionInfo *connInfo);
 
+	void setPositionsPlanar (ThreadInfo *tInfo, ucomp type, ftype totalLength);
+
 	int connectTypeToTypeRandom(
 			ThreadInfo *tInfo, int sourceType, int destType, ucomp synapse,
 			ftype connRatio, ftype baseW, ftype randW, ftype baseD, ftype randD);
@@ -93,6 +95,8 @@ public:
 	int connectAssociativeFromFile (char *filename);
 	int connectRandom ( ThreadInfo *tInfo );
 	int createTestConnections ();
+private:
+    int transformToCombinedConnection(ThreadInfo *tInfo, int destType, int neuron);
 };
 
 #endif /* CONNECTIONS_H_ */

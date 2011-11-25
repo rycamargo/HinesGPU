@@ -71,6 +71,8 @@ public:
 	int currStep;
 	ftype dt;
 
+	ftype posx, posy, posz;
+
 	FILE *outFile;
 
 	ActiveChannels *activeChannels; // Active channels

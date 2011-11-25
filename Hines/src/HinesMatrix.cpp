@@ -22,6 +22,8 @@ HinesMatrix::HinesMatrix() {
 	nGeneratedSpikes = 0;
 	threshold = 50;
 	minSpikeInterval = 5;
+
+	posx=0; posy=0; posz=0;
 }
 
 void HinesMatrix::freeMem() {

@@ -373,26 +373,26 @@ void HinesMatrix::upperTriangularizeSingle() {
  * This part is executed in every integration step
  ***************************************************************************/
 
-void HinesMatrix::findActiveCurrents() {
-
-	activeChannels->evaluateCurrents( );
-
-	int comp;
-	for (int i=0; i<activeChannels->getCompListSize(); i++) {
-
-		comp = activeChannels->getCompList()[i];
-		active[ comp ] -= activeChannels->gNaChannel[i] * activeChannels->ENa ;
-		active[ comp ] -=  activeChannels->gKChannel[i] * activeChannels->EK  ;
-		active[ comp ] -=  ( 1 / Rm[comp] ) * ( activeChannels->ELeak );
-
-	}
-
-}
+//void HinesMatrix::findActiveCurrents() {
+//
+//	activeChannels->evaluateCurrents( );
+//
+//	int comp;
+//	for (int i=0; i<activeChannels->getCompListSize(); i++) {
+//
+//		comp = activeChannels->getCompList()[i];
+//		active[ comp ] -= activeChannels->gNaChannel[i] * activeChannels->ENa ;
+//		active[ comp ] -=  activeChannels->gKChannel[i] * activeChannels->EK  ;
+//		active[ comp ] -=  ( 1 / Rm[comp] ) * ( activeChannels->ELeak );
+//
+//	}
+//
+//}
 
 void HinesMatrix::upperTriangularizeAll() {
 
 	if (activeChannels != 0 && currStep >= 0)
-		findActiveCurrents();
+		activeChannels->evaluateCurrents(Rm, active);
 
 	if (synapticChannels != 0)
 		synapticChannels->evaluateCurrents(currStep * dt);
@@ -444,7 +444,7 @@ void HinesMatrix::upperTriangularizeAll() {
 void HinesMatrix::updateRhs() {
 
 	if (activeChannels != 0 && currStep >= 0)
-		findActiveCurrents();
+		activeChannels->evaluateCurrents(Rm, active);
 
 	if (synapticChannels != 0)
 		synapticChannels->evaluateCurrents(currStep * dt);

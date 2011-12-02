@@ -133,7 +133,7 @@ public:
 
 	void upperTriangularizeAll();
 
-	void findActiveCurrents();
+	//void findActiveCurrents();
 
 	void updateRhs();
 

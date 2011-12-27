@@ -32,8 +32,9 @@ void CpuSimulationControl::performCpuNeuronalProcessing() {
 	for (int s=0; s < kernelInfo->nKernelSteps; s++) {
 
 		for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
-			for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++)
+			for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
 				sharedData->matrixList[type][neuron].solveMatrix();
+			}
 
 		if (tInfo->threadNumber == 0 && benchConf.printSampleVms == 1)
 			sharedData->neuronInfoWriter->updateSampleVm(tInfo->kStep + s);

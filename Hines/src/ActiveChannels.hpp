@@ -8,12 +8,16 @@
 #ifndef ACTIVECHANNELS_H_
 #define ACTIVECHANNELS_H_
 
+#define EXPONENTIAL 0   // A exp((v-V0)/B)
+#define SIGMOID 1 		// A / (exp((v-V0)/B) + 1)
+#define LINOID 2        // A (v-V0) / (exp((v-V0)/B) - 1)
+
 #include "Definitions.hpp"
 
 class ActiveChannels {
 	ftype dt;
-	int compListSize;
-	ucomp *compList;
+	int nActiveComp;
+	ucomp *activeCompList;
 
 	public:
 
@@ -32,12 +36,14 @@ class ActiveChannels {
 	ftype EK;
 	ftype ENa;
 
-	ActiveChannels(ftype dt, int nActiveComp_, ucomp *activeCompList_, ftype *vmListNeuron);
+	ActiveChannels(ftype dt, int nActiveComp_, ucomp *activeCompList_, ftype *vmListNeuron_, int nComp);
 	virtual ~ActiveChannels();
 
 
-	int getCompListSize () { return compListSize; }
-	ucomp *getCompList () { return compList; }
+	void setActiveChannels();
+
+	int getCompListSize () { return nActiveComp; }
+	ucomp *getCompList () { return activeCompList; }
 
 
 	void evaluateCurrents( ftype *Rm, ftype *active );
@@ -46,19 +52,33 @@ class ActiveChannels {
 	/**
 	 * New implementation
 	 */
-	int *channelInfo; // nGates(0) comp(1)
-	int nChannels;
-	int *gateInfo; // gatePower(0) função alpha (1) função beta (2)
-	ftype *gatePar;// parâmetros de alpha (A, B, V0) (0,1,2) e beta (3,4,5)
+	ucomp *ucompMem;
+	ftype *ftypeMem;
 
-	ftype *gateState;
+	ucomp *channelInfo; // nGates(0) comp(1) gatePos(3)
+	ftype *channelEk;
+	ftype *channelGbar;
+
+	int nChannels;    //
+
+	ucomp *gateInfo;    // gatePower(0): function alpha (1) and function beta (2)
+	ftype *gatePar;   // parameters of alpha (A, B, V0) (0,1,2) and beta (3,4,5) functions
+
+	ftype *gateState; // opening of the gates, indexed by gatePos in the channelInfo
+
+	int nComp;
+	ftype gSoma; // Contains the soma active conductances. Used when not triangularizing.
+
+	ftype *eLeak; // contains the eLEak of the active compartments
+
+	ftype getSomaCurrents () {return gSoma;}
 
 	void evaluateCurrentsNew( ftype *Rm, ftype *active );
 	void evaluateGatesNew();
 
-	void createChannelList (int nChannels, int *nGates, int *comp, ftype *vBar);
+	void createChannelList (int nChannels, ucomp *nGates, ucomp *comp, ftype *channelEk, ftype *gBar, ftype *eLeak);
 
-	void setGate (int channel, int gate, int gatePower,
+	void setGate (int channel, int gate, ftype state, ucomp gatePower,
 			ucomp alpha, ftype alphaA, ftype alphaB, ftype alphaV0,
 			ucomp beta, ftype betaA, ftype betaB, ftype betaV0);
 };

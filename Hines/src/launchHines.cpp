@@ -163,8 +163,8 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 
 			tInfo->sharedData->totalTime   = 1000; // 10s
 			tInfo->sharedData->inputSpikeRate = 0.01;
-			tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-			tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+			tInfo->sharedData->pyrConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+			tInfo->sharedData->inhConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05
 			tInfo->sharedData->pyrInhWeight = 0.1; //1.0/(nPyramidal/100.0);
@@ -196,7 +196,7 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 			benchConf.printAllVmKernelFinish = 0;
 			benchConf.printAllSpikeTimes = 0;
 
-			tInfo->sharedData->totalTime   = 1000; // 1s
+			tInfo->sharedData->totalTime   = 100; // 1s
 			tInfo->sharedData->inputSpikeRate = 0.01;
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05

@@ -244,6 +244,8 @@ int GpuSimulationControl::prepareExecution(int type) {
 		h.leftListColumn = h.leftListLine + h.leftListSize;
 		h.leftStartPos   = h.leftListColumn + h.leftListSize;
 
+		//printf ("%ld\n", m.activeChannels->memory);
+
 		// must match the order in ActiveChannels.cpp
 		if (nCompActive > 0) {
 			cudaMemcpy(h.vmTimeSerie + nComp*nKernelSteps, m.activeChannels->memory, exclusiveMemActive, cudaMemcpyHostToDevice);

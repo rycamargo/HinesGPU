@@ -123,8 +123,8 @@ void HinesMatrix::defineNeuronCableSquid() {
 	int nActivecomp = 1;
 	ucomp *activeCompList = new ucomp[nActivecomp];
 	activeCompList[0] = nComp-1;
-	activeChannels = new ActiveChannels (dt, nActivecomp, activeCompList, vmList, nComp);
-	activeChannels->setActiveChannels ();
+	activeChannels = new ActiveChannels (dt, vmList, nComp);
+	activeChannels->setActiveChannels (nActivecomp, activeCompList);
 
 	activeChannels->ENa   = 115.0009526;  // obtained from Squid.g
 	activeChannels->EK    = -11.99979277; // obtained from Squid.g
@@ -198,18 +198,20 @@ void HinesMatrix::defineNeuronTreeN(int nComp, int active) {
 
 	int hhDefault = 0; // TODO:
 
+	int nActivecomp = 2;
+
 	/**
 	 * Crate active channels
 	 */
 	if (hhDefault) {
-		int nActivecomp = 1;
+
 		triangAll = 0;
 
 		ucomp *activeCompList = new ucomp[nActivecomp];
 		activeCompList[0] = (ucomp)(nComp-1);
 		if (nActivecomp > 1) activeCompList[1] = (ucomp)0;
-		activeChannels = new ActiveChannels (dt, nActivecomp, activeCompList, vmList, nComp);
-		activeChannels->setActiveChannels ();
+		activeChannels = new ActiveChannels (dt, vmList, nComp);
+		activeChannels->setActiveChannels (nActivecomp, activeCompList);
 
 		activeChannels->ENa   = 115.0009526;  // obtained from Squid.g
 		activeChannels->EK    = -11.99979277; // obtained from Squid.g
@@ -223,66 +225,62 @@ void HinesMatrix::defineNeuronTreeN(int nComp, int active) {
 	}
 	else {
 
-		int nActivecomp = 1;
-		triangAll = 0;
+		if (nActivecomp == 1) triangAll = 0;
+		else triangAll = 1;
+
+		assert (nActivecomp < nComp);
 		ucomp *activeCompList = new ucomp[nActivecomp];
-		activeCompList[0] = (ucomp)(nComp-1);
+		for (int i=0; i<nActivecomp; i++)
+			activeCompList[i] = (ucomp)( (nComp-1)-i );
 
-		activeChannels = new ActiveChannels (dt, nActivecomp, activeCompList, vmList, nComp);
+		activeChannels = new ActiveChannels (dt, vmList, nComp);
 
-		//***************************************************
-//		activeChannels->setActiveChannels ();
-//		activeChannels->ENa   = 115.0009526;  // obtained from Squid.g
-//		activeChannels->EK    = -11.99979277; // obtained from Squid.g
-//		activeChannels->ELeak =  10.613;      // obtained from Squid.g
-//		activeChannels->gNaBar[0] = 120 * (2*PI*rad[ activeChannels->getCompList()[0]]*dx);
-//		activeChannels->gKBar[0]  =  36 * (2*PI*rad[ activeChannels->getCompList()[0]]*dx);
-//		if (nActivecomp > 1) activeChannels->gNaBar[1] = 120 * (2*PI*rad[ activeChannels->getCompList()[1]]*dx);
-//		if (nActivecomp > 1) activeChannels->gKBar[1]  =  36 * (2*PI*rad[ activeChannels->getCompList()[1]]*dx);
-		//***************************************************
-
-		int nChannels   = 2;
+		int nChannels   = 2 * nActivecomp;
 		ucomp *nGates   = new ucomp[nChannels];
 		ucomp *compList = new ucomp[nChannels];
 		ftype *vBar     = new ftype[nChannels];
 		ftype *channelEk     = new ftype[nChannels];
 
-		// Na channel
-		nGates[0]    = 2;
-		compList[0]  = nComp-1;
-		vBar[0]      = 115.0009526;  // obtained from Squid.g
-		channelEk[0] = 120 * (2*PI*rad[ compList[0] ]*dx);
-
-		// K channel
-		nGates[1]    = 1;
-		compList[1]  = nComp-1;
-		vBar[1]      = -11.99979277; // obtained from Squid.g
-		channelEk[1] =  36 * (2*PI*rad[ compList[1] ]*dx);
-
-		// Eleak for Na and K from compartment zero
 		ftype *eLeak    = new ftype[nActivecomp];
-		eLeak[0]        =  10.613;      // obtained from Squid.g
 
-		activeChannels->createChannelList (nChannels, nGates, compList, vBar, channelEk, eLeak);
+		for (int activeComp=0; activeComp<nActivecomp; activeComp++) {
 
-		//n[i] = 0.3177;
-		//h[i] = 0.5960;
-		//m[i] = 0.0529;
+			// Na channel
+			nGates[2*activeComp]    = 2;
+			compList[2*activeComp]  = activeCompList[activeComp];
+			vBar[2*activeComp]      = 115.0009526;  // obtained from Squid.g
+			channelEk[2*activeComp] = 120 * (2*PI*rad[ activeCompList[activeComp] ]*dx);
 
-		// Gate m: channel 0, gate 0, power 3
-		// alpha LINOID: 0.1; A=-0.1, B=-10, V0=25
-		// beta EXPONENTIAL: A = 4, B=-18, V0=0
-		activeChannels->setGate(0, 0, 0.0529, 3, LINOID, -0.1, -10, 25, EXPONENTIAL, 4, -18, 0);
+			// K channel
+			nGates[2*activeComp+1]    = 1;
+			compList[2*activeComp+1]  = activeCompList[activeComp];
+			vBar[2*activeComp+1]      = -11.99979277; // obtained from Squid.g
+			channelEk[2*activeComp+1] =  36 * (2*PI*rad[ activeCompList[activeComp] ]*dx);
 
-		// Gate h: channel 0, gate 1, power 1
-		// alpha EXPONENTIAL: A = 0.07, B=-20, V0=0
-		// beta SIGMOID: A = 1, B=-10, V0=30
-		activeChannels->setGate(0, 1, 0.5960, 1, EXPONENTIAL, 0.07, -20, 0, SIGMOID, 1, -10, 30);
+			// Eleak for Na and K from compartment zero
+			eLeak[activeComp]        =  10.613;      // obtained from Squid.g
+		}
 
-		// Gate n: channel 1, gate 0, power 4
-		// alpha LINOID: 0.1; A=-0.01, B=-10, V0=10
-		// beta EXPONENTIAL: A = 0.125, B=-80, V0=0
-		activeChannels->setGate(1, 0, 0.3177, 4, LINOID, -0.01, -10, 10, EXPONENTIAL, 0.125, -80, 0);
+		activeChannels->createChannelList (nChannels, nGates, compList, vBar, channelEk, eLeak, nActivecomp, activeCompList);
+		delete[] activeCompList;
+
+		for (int activeComp=0; activeComp<nActivecomp; activeComp++) {
+
+			// Gate m: channel 0, gate 0, power 3
+			// alpha LINOID: 0.1; A=-0.1, B=-10, V0=25
+			// beta EXPONENTIAL: A = 4, B=-18, V0=0
+			activeChannels->setGate(2*activeComp, 0, 0.0529, 3, LINOID, -0.1, -10, 25, EXPONENTIAL, 4, -18, 0);
+
+			// Gate h: channel 0, gate 1, power 1
+			// alpha EXPONENTIAL: A = 0.07, B=-20, V0=0
+			// beta SIGMOID: A = 1, B=-10, V0=30
+			activeChannels->setGate(2*activeComp, 1, 0.5960, 1, EXPONENTIAL, 0.07, -20, 0, SIGMOID, 1, -10, 30);
+
+			// Gate n: channel 1, gate 0, power 4
+			// alpha LINOID: 0.1; A=-0.01, B=-10, V0=10
+			// beta EXPONENTIAL: A = 0.125, B=-80, V0=0
+			activeChannels->setGate(2*activeComp+1, 0, 0.3177, 4, LINOID, -0.01, -10, 10, EXPONENTIAL, 0.125, -80, 0);
+		}
 
 	}
 
@@ -481,7 +479,7 @@ void HinesMatrix::upperTriangularizeAll() {
 
 		for (; leftListColumn[pos] < comp && pos < leftListSize ; pos++);
 
-		triangList[pos] -= (activeChannels->gNaChannel[i] + activeChannels->gKChannel[i]);
+		triangList[pos] -= activeChannels->getActiveConductances(i);
 	}
 
 	for (int k = 0; k < leftListSize; k++) {
@@ -538,7 +536,7 @@ void HinesMatrix::backSubstitute() {
 	}
 	else if (triangAll == 0 && activeChannels != 0) {
 		//printf("%f\n", activeChannels->getSomaCurrents());
-		vmTmp[nComp-1] = rhsM[nComp-1] / ( triangList[leftListSize-1] - activeChannels->getSomaCurrents());
+		vmTmp[nComp-1] = rhsM[nComp-1] / ( triangList[leftListSize-1] - activeChannels->getActiveConductances(0));
 	}
 	else
 		vmTmp[nComp-1] = rhsM[nComp-1]/triangList[leftListSize-1];

@@ -12,44 +12,22 @@
 
 #define PYR_M_ALPHA (V != 25.0) ? (0.1 * (25 - V)) / ( expf( 0.1 * (25-V) ) - 1 ) : 1
 
-#define N_GATE_FIELDS 3
-
-#define GATE_POWER 0
-#define ALPHA_FUNCTION 1
-#define BETA_FUNCTION 2
-
-#define N_CHANNEL_FIELDS 3
-
-#define CH_NGATES 0
-#define CH_COMP 1
-#define CH_GATEPOS 2
-
-#define N_GATE_FUNC_PAR 6
-
-#define A_A  0
-#define A_B  1
-#define A_V0 2
-
-#define B_A  3
-#define B_B  4
-#define B_V0 5
-
-ActiveChannels::ActiveChannels(ftype dt_, int nActiveComp_, ucomp *activeCompList_, ftype *vmListNeuron_, int nComp) {
+ActiveChannels::ActiveChannels(ftype dt_, ftype *vmListNeuron_, int nComp) {
 
 	this->dt = dt_;
 	this->nComp = nComp;
 
-	this->nActiveComp    = nActiveComp_;
-	this->activeCompList = activeCompList_;
 	this->vmList = vmListNeuron_;
-	this->gSoma = 0;
 
 }
 
-void ActiveChannels::setActiveChannels() {
+void ActiveChannels::setActiveChannels(int nActiveComp_, ucomp *activeCompList_) {
 
 
 	this->channelInfo = 0;
+
+	this->nActiveComp    = nActiveComp_;
+	this->activeCompList = activeCompList_;
 
 	memory = new ftype[nActiveComp * 7];
 	n = memory;
@@ -72,7 +50,7 @@ void ActiveChannels::setActiveChannels() {
 
 ActiveChannels::~ActiveChannels() {
 	delete[] memory;
-	delete[] activeCompList;
+	//delete[] activeCompList;
 }
 
 void ActiveChannels::evaluateCurrents(	ftype *Rm, ftype *active ) {
@@ -143,11 +121,16 @@ void ActiveChannels::evaluateCurrentsNew( ftype *Rm, ftype *active ) {
 
 	evaluateGatesNew();
 
+	for (int i=0; i<nActiveComp; i++)
+		gActive[i] = 0;
+
 	/**
 	 * Update the channel conductances
 	 */
-	gSoma = 0;
 	int pos = 0;
+	int actCompPos = -1;
+	int lastActComp = -1;
+
 	for (int ch=0; ch<nChannels; ch++) {
 
 		int nGates     = channelInfo[ch*N_CHANNEL_FIELDS + CH_NGATES];
@@ -184,10 +167,13 @@ void ActiveChannels::evaluateCurrentsNew( ftype *Rm, ftype *active ) {
 
 		active[ comp ] -= gChannel * channelEk[ch] ;
 
-		if (comp == nComp-1) {
-			gSoma += gChannel;
-			//printf("gSoma=%f\n", gSoma);
+		if (comp != lastActComp) {
+			actCompPos++;
+			lastActComp = comp;
+			//assert(activeCompList[actCompPos] == comp);
 		}
+		gActive[ actCompPos ] += gChannel;
+
 	}
 
 	for (int i=0; i<nActiveComp; i++) {
@@ -264,19 +250,22 @@ void ActiveChannels::evaluateGatesNew(  ) {
 	}
 }
 
-void ActiveChannels::createChannelList (int nChannels_, ucomp *nGates, ucomp *comp, ftype *chEk, ftype *gBar, ftype *eLeak_) {
+void ActiveChannels::createChannelList (int nChannels_, ucomp *nGates, ucomp *comp, ftype *chEk, ftype *gBar, ftype *eLeak_, int nActiveComp_, ucomp *activeCompList_) {
 
 	if (nChannels_ <= 0) return;
 
-	int nGatesTotal = 0;
+	this->nGatesTotal = 0;
 	for (int i=0; i<nChannels_; i++)
-		nGatesTotal += nGates[i];
+		this->nGatesTotal += nGates[i];
 
 	this->nChannels   = nChannels_;
+	this->nActiveComp = nActiveComp_;
 
-	this->ucompMem    = new ucomp[nChannels * N_CHANNEL_FIELDS + nGatesTotal * N_GATE_FIELDS];
-	this->channelInfo = this->ucompMem;
-	this->gateInfo    = this->channelInfo + (nChannels * N_CHANNEL_FIELDS);
+	ucompMemSize = nChannels * N_CHANNEL_FIELDS + nGatesTotal * N_GATE_FIELDS + nActiveComp;
+	this->ucompMem    = new ucomp[ucompMemSize];
+	this->activeCompList = this->ucompMem;
+	this->channelInfo    = this->activeCompList + nActiveComp;
+	this->gateInfo       = this->channelInfo + (nChannels * N_CHANNEL_FIELDS);
 
 	this->channelInfo[CH_NGATES]  = nGates[0];
 	this->channelInfo[CH_COMP]    = comp[0];
@@ -288,20 +277,29 @@ void ActiveChannels::createChannelList (int nChannels_, ucomp *nGates, ucomp *co
 				this->channelInfo[(ch-1)*N_CHANNEL_FIELDS + CH_GATEPOS] + nGates[ch-1];
 	}
 
-	this->ftypeMem    = new ftype[nChannels_*2 + nGatesTotal * (N_GATE_FUNC_PAR + 1) + nActiveComp];
+	ftypeMemSize = nChannels_*2 + nGatesTotal * (N_GATE_FUNC_PAR + 1) + nActiveComp*2;
+	this->ftypeMem    = new ftype[ftypeMemSize];
 	this->channelEk   = this->ftypeMem;
 	this->channelGbar = this->channelEk   + nChannels_;
 	this->eLeak       = this->channelGbar + nChannels_;
-	this->gateState   = this->eLeak       + nActiveComp;
+	this->gActive	  = this->eLeak       + nActiveComp;
+	this->gateState   = this->gActive     + nActiveComp;
 	this->gatePar     = this->gateState   + nGatesTotal;
+
+
+
 
 	for (int ch=0; ch<nChannels_; ch++) {
 		this->channelEk[ch]   = chEk[ch];
 		this->channelGbar[ch] = gBar[ch];
 	}
 
-	for (int i=0; i<nActiveComp; i++)
+	for (int i=0; i<nActiveComp; i++) {
 		this->eLeak[i] = eLeak_[i];
+		this->activeCompList[i] = activeCompList_[i];
+		this->gActive[i] = 0;
+	}
+
 
 }
 

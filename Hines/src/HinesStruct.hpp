@@ -53,22 +53,44 @@ typedef struct {
 	ftype *curr;   // Injected current
 
 	/******************************************************************
-	 * Active Channels
+	 * Active Channels (OLD)
 	 ******************************************************************/
-	ftype *active; // Active current
-	int compListSize; // Number of compartments with active channels
-	ucomp *compList; // List of compartments with active channels
-	ftype *n;
-	ftype *h;
-	ftype *m;
-	ftype *gNaBar;
-	ftype *gKBar;
-	ftype *gNaChannel;
-	ftype *gKChannel;
-	ftype ELeak;
-	ftype EK;
-	ftype ENa;
+	//ftype *active; // Active current
+	//int compListSize; // Number of compartments with active channels
+	//ucomp *compList; // List of compartments with active channels
+//	ftype *n;
+//	ftype *h;
+//	ftype *m;
+//	ftype *gNaBar;
+//	ftype *gKBar;
+//	ftype *gNaChannel;
+//	ftype *gKChannel;
+//	ftype ELeak;
+//	ftype EK;
+//	ftype ENa;
 	int triangAll;
+
+	/******************************************************************
+	 * Active Channels (NEW)
+	 ******************************************************************/
+
+	ftype *active;    // Active current (size = # of compartments)
+	ftype *gateState; // opening of the gates, indexed by gatePos in the channelInfo (size = # of gates)
+
+	ucomp *channelInfo; // nGates(0) comp(1) gatePos(3)
+	ftype *channelEk;
+	ftype *channelGbar;
+
+	ucomp *gateInfo;    // gatePower(0): function alpha (1) and function beta (2)
+	ftype *gatePar;   // parameters of alpha (A, B, V0) (0,1,2) and beta (3,4,5) functions
+
+	int nChannels;
+
+	int compListSize; // Number of compartments with active channels
+	ucomp *compList;  // List of compartments with active channels
+	ftype *eLeak;     // contains the eLEak of the active compartments
+
+	ftype *gActive; // Contains the active channel conductances.
 
 
 	/******************************************************************

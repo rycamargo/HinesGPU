@@ -514,6 +514,13 @@ int PerformSimulation::launchExecution() {
 					cudaMemcpy(synData->vmListHost[type], synData->vmListDevice[type], sizeof(ftype) * nNeurons[type], cudaMemcpyDeviceToHost);
 		}
 
+		// used only for debugging
+		//if(threadNumber == 0 && tInfo->kStep == 0) {
+		//	ftype usedSharedMem;
+		//	cudaMemcpy((void *)(&usedSharedMem), sharedData->hList[startTypeThread][0].active, sizeof(ftype), cudaMemcpyDeviceToHost);
+		//	printf("usedSharedMem=%.1f bytes.\n", usedSharedMem);
+		//}
+
 		/*--------------------------------------------------------------
 		 * Writes Vm to file at the end of each kernel execution
 		 *--------------------------------------------------------------*/

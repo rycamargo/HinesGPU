@@ -31,23 +31,23 @@ public:
 	ftype *vmList;
 	ftype *vmTmp;
 
-	ftype *leftList;
-	ucomp *leftListLine;
-	ucomp *leftListColumn;
-	ucomp *leftStartPos;
-	int leftListSize;
+	ftype *leftList;       // contains the Hines Matrix in spares form
+	ucomp *leftListLine;   // contains the line of each matrix element
+	ucomp *leftListColumn; // contains the column of each matrix element
+	ucomp *leftStartPos;   // contains the start position for each compartment
+	int leftListSize;      // contains the size of the left list
 
 	/**
 	 * Triangularized list
 	 */
-	ftype *triangList;
+	ftype *triangList;     // contains the hines matrix after the triangularization
 
 	/**
 	 *  Used for triangSingle
 	 **/
-	ftype *mulList;
-	ucomp *mulListDest;
-	ucomp *mulListComp;
+	ftype *mulList;     // contains the values to perform the update of the rhsM
+	ucomp *mulListDest; // contains the line in the rhsM that will be updated
+	ucomp *mulListComp; // contains the line used to update the rhsM
 	int mulListSize;
 
 	ftype *curr;

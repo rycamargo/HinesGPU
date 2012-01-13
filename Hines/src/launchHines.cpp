@@ -380,7 +380,7 @@ int main(int argc, char **argv) {
 
 	tInfo->sharedData->randBuf = new random_data *[nThreads];
 
-	benchConf.assertResultsAll = 1;
+	benchConf.assertResultsAll = 0; // TODO: was 1
 	benchConf.printSampleVms = 0;
 	benchConf.printAllVmKernelFinish = 0;
 	benchConf.printAllSpikeTimes = 1;

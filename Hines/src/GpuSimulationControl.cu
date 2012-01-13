@@ -184,7 +184,7 @@ int GpuSimulationControl::prepareExecution(int type) {
 	/******************************************************************************************
 	 * Allocates the ucomp memory for all neurons and copies data to device
 	 *******************************************************************************************/
-	int uMemMatrixSize    = sizeof(ucomp) * (m0.mulListSize + m0.leftListSize) * 2 + nComp;
+	int uMemMatrixSize    = sizeof(ucomp) * ((m0.mulListSize + m0.leftListSize) * 2 + nComp);
 	int uMemActiveSize    = sizeof(ucomp) * m0.activeChannels->ucompMemSize;
 	//int uMemActiveSize    = sizeof(ucomp) * nCompActive; // TODO: old active
 	int uMemSynapticSize  = sizeof(ucomp) * 3*nSynaptic;
@@ -262,24 +262,6 @@ int GpuSimulationControl::prepareExecution(int type) {
 		 ****************************************************/
 		if (nCompActive > 0 && m.activeChannels->channelInfo == 0) {
 
-//			cudaMemcpy(h.vmTimeSerie + nComp*nKernelSteps, m.activeChannels->memory, fExclusiveMemActiveSize, cudaMemcpyHostToDevice);
-//
-//			h.n = h.vmTimeSerie + nComp*nKernelSteps;
-//			h.h = h.n + nCompActive;
-//			h.m = h.h + nCompActive;
-//			h.gNaBar = h.m + nCompActive;
-//			h.gKBar  = h.gNaBar + nCompActive;
-//			h.gNaChannel  = h.gKBar + nCompActive;
-//			h.gKChannel  = h.gNaChannel + nCompActive;
-//
-//			h.ELeak = m.activeChannels->ELeak;
-//			h.EK = m.activeChannels->EK;
-//			h.ENa = m.activeChannels->ENa;
-//
-//			h.compListSize = nCompActive;
-//			h.compList = uMemActiveAddress;
-//
-//			checkCUDAError("Memory Allocation3:");
 		}
 		else if (m.activeChannels->channelInfo != 0) {
 

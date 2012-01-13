@@ -140,6 +140,7 @@ void ActiveChannels::evaluateCurrentsNew( ftype *Rm, ftype *active ) {
 		//printf("gChannel1=%f\n", gChannel);
 
 		for (int gt=0; gt < nGates; gt++, pos++) {
+
 			switch( gateInfo[pos * N_GATE_FIELDS + GATE_POWER] ) {
 			case 4:
 				gChannel *= (gateState[pos]*gateState[pos]*gateState[pos]*gateState[pos]);
@@ -245,6 +246,7 @@ void ActiveChannels::evaluateGatesNew(  ) {
 			b = (1/dt - (alpha + beta)/2) / (1/dt + (alpha + beta)/2);
 
 			gateState[pos] = a + b * gateState[pos];
+
 		}
 
 	}

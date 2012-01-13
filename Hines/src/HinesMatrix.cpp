@@ -235,33 +235,33 @@ void HinesMatrix::defineNeuronTreeN(int nComp, int active) {
 
 		activeChannels = new ActiveChannels (dt, vmList, nComp);
 
-		int nChannels   = 2 * nActivecomp;
-		ucomp *nGates   = new ucomp[nChannels];
-		ucomp *compList = new ucomp[nChannels];
-		ftype *vBar     = new ftype[nChannels];
-		ftype *channelEk     = new ftype[nChannels];
+		int nChannels    = 2 * nActivecomp;
+		ucomp *nGates    = new ucomp[nChannels];
+		ucomp *compList  = new ucomp[nChannels];
+		ftype *channelEk = new ftype[nChannels];
+		ftype *gBar      = new ftype[nChannels];
 
-		ftype *eLeak    = new ftype[nActivecomp];
+		ftype *eLeak     = new ftype[nActivecomp];
 
 		for (int activeComp=0; activeComp<nActivecomp; activeComp++) {
 
 			// Na channel
 			nGates[2*activeComp]    = 2;
 			compList[2*activeComp]  = activeCompList[activeComp];
-			vBar[2*activeComp]      = 115.0009526;  // obtained from Squid.g
-			channelEk[2*activeComp] = 120 * (2*PI*rad[ activeCompList[activeComp] ]*dx);
+			channelEk[2*activeComp] = 115.0009526;  // obtained from Squid.g
+			gBar[2*activeComp]      = 120 * (2*PI*rad[ activeCompList[activeComp] ]*dx);
 
 			// K channel
 			nGates[2*activeComp+1]    = 1;
 			compList[2*activeComp+1]  = activeCompList[activeComp];
-			vBar[2*activeComp+1]      = -11.99979277; // obtained from Squid.g
-			channelEk[2*activeComp+1] =  36 * (2*PI*rad[ activeCompList[activeComp] ]*dx);
+			channelEk[2*activeComp+1] = -11.99979277; // obtained from Squid.g
+			gBar[2*activeComp+1]      =  36 * (2*PI*rad[ activeCompList[activeComp] ]*dx);
 
 			// Eleak for Na and K from compartment zero
-			eLeak[activeComp]        =  10.613;      // obtained from Squid.g
+			eLeak[activeComp]         =  10.613;      // obtained from Squid.g
 		}
 
-		activeChannels->createChannelList (nChannels, nGates, compList, vBar, channelEk, eLeak, nActivecomp, activeCompList);
+		activeChannels->createChannelList (nChannels, nGates, compList, channelEk, gBar, eLeak, nActivecomp, activeCompList);
 		delete[] activeCompList;
 
 		for (int activeComp=0; activeComp<nActivecomp; activeComp++) {
@@ -529,7 +529,7 @@ void HinesMatrix::updateRhs() {
 
 void HinesMatrix::backSubstitute() {
 
-	// TODO:
+	// TODO: Remove me
 	if (triangAll == 0 && activeChannels != 0 && activeChannels->channelInfo == 0) {
 		vmTmp[nComp-1] = rhsM[nComp-1] /
 		( triangList[leftListSize-1] - activeChannels->gNaChannel[0] - activeChannels->gKChannel[0]);

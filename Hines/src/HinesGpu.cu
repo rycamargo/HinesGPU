@@ -247,6 +247,9 @@ __device__ void evaluateCurrentsGNew( HinesStruct *hList, ftype *activeList, fty
 
 
 		for (int gt=0; gt < nGates; gt++, pos++) {
+
+//			gateState[pos]=0;
+
 			switch( gateInfo[pos * N_GATE_FIELDS + GATE_POWER] ) {
 			case 4:
 				gChannel *= (gateState[pos]*gateState[pos]*gateState[pos]*gateState[pos]);
@@ -395,8 +398,6 @@ __device__ void updateRhsG(HinesStruct *hList,
 	}
 
 	//__syncthreads();
-
-//	findActiveCurrentsG(hList, active, vmListLocal, nGate, hGate, mGate, nComp);
 
 	evaluateCurrentsGNew( hList, active, vmListLocal, nChannels,
 			channelInfo, channelEk, channelGbar, gatePar, gateInfo, gateState,

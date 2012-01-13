@@ -270,13 +270,14 @@ int GpuSimulationControl::prepareExecution(int type) {
 
 			h.nChannels    = m.activeChannels->nChannels;
 			h.compListSize = m.activeChannels->nActiveComp;
+			h.nGatesTotal  = m.activeChannels->nGatesTotal;
 
 			h.channelEk   = activeMemAddress;
 			h.channelGbar = h.channelEk   + h.nChannels;
 			h.eLeak       = h.channelGbar + h.nChannels;
 			h.gActive	  = h.eLeak       + h.compListSize;
 			h.gateState   = h.gActive	  + h.compListSize;
-			h.gatePar     = h.gateState   + m.activeChannels->nGatesTotal;
+			h.gatePar     = h.gateState   + h.nGatesTotal;
 
 
 			h.compList    = uMemActiveAddress;

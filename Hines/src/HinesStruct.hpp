@@ -85,6 +85,7 @@ typedef struct {
 	ftype *gatePar;   // parameters of alpha (A, B, V0) (0,1,2) and beta (3,4,5) functions
 
 	int nChannels;
+	int nGatesTotal;
 
 	int compListSize; // Number of compartments with active channels
 	ucomp *compList;  // List of compartments with active channels

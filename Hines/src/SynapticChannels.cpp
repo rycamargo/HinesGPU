@@ -17,6 +17,8 @@ SynapticChannels::SynapticChannels(ftype *synapticCurrent, ftype *vmList, int nC
 	spikeList = 0;
 	spikeListSize = 0;
 	synapseWeightList = 0;
+	activationList = 0;
+	activationListSize = 0;
 
 	pthread_mutex_init( &addSpikeMutex, NULL );
 	createChannelsAndSynapses(nComp);
@@ -29,6 +31,11 @@ SynapticChannels::~SynapticChannels() {
 	if (synapseCompList != 0) delete[] synapseCompList;
 	if (spikeList != 0) delete[] spikeList;
 	//if (synapseWeightList != 0) delete[] synapseWeightList;
+
+	if (activationList != 0) delete[] activationList;
+
+
+
 }
 
 void SynapticChannels::createChannelsAndSynapses(int nComp) {
@@ -288,6 +295,100 @@ void SynapticChannels::updateSpikeListGpu(ftype time, ftype *spikeListGlobal,
 	pthread_mutex_unlock (&addSpikeMutex);
 }
 
+//void SynapticChannels::addToSynapticActivationList(
+//		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight) {
+//
+//	pthread_mutex_lock (&addSpikeMutex);
+////	ftype fpos = (spikeTime + delay - currTime) / dt;
+////	ucomp pos = fpos;
+////	if ( (fpos - pos) > 0.5 ) pos++;
+//	ucomp pos = (spikeTime + delay - currTime) / dt + 1;
+//	pos = (activationListPos[synapse] + pos) % activationListSize;
+//	activationList[synapse * activationListSize + pos] += weight / dt;
+//	pthread_mutex_unlock (&addSpikeMutex);
+//}
+
+void SynapticChannels::addToSynapticActivationList(
+		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight) {
+
+	pthread_mutex_lock (&addSpikeMutex);
+
+	ftype fpos = (spikeTime + delay - currTime) / dt;
+
+	ucomp pos     = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
+	ucomp nextPos = ( pos + 1 ) % activationListSize;
+
+	ftype diff = fpos - (int)fpos;
+
+	activationList[synapse * activationListSize + pos]     += (weight / dt) * ( 1 - diff );
+	activationList[synapse * activationListSize + nextPos] += (weight / dt) * diff;
+
+	pthread_mutex_unlock (&addSpikeMutex);
+}
+
+void SynapticChannels::configureSynapticActivationList(ftype dt, int listSize) {
+
+	if (activationList != 0)
+		delete[] activationList;
+
+	activationListSize = listSize;
+	activationListPos = new ucomp[synapseListSize];
+	activationList = new ftype[synapseListSize * activationListSize];
+	for (int syn=0; syn < synapseListSize; syn++) {
+		activationListPos[syn] = 0;
+		for (int i=0; i < activationListSize; i++)
+			activationList[syn * activationListSize + i] = 0;
+	}
+
+	// TODO: used only for testing
+	synCurrentTmp = new ftype[synapseListSize * synapseListSize];
+
+	synConstants = new ftype[synapseListSize * SYN_CONST_N];
+	for (int syn=0; syn < synapseListSize; syn++) {
+		ftype tau1 = tau[2*syn];   // tau1
+		ftype tau2 = tau[2*syn+1]; // tau2
+
+		synConstants[SYN_X1] = tau1 * ( 1.0 - expf( -dt / tau1 ) );
+		synConstants[SYN_X2] = expf( -dt / tau1 );
+
+		synConstants[SYN_Y1] = tau2 * ( 1.0 - expf( -dt / tau2 ) );
+		synConstants[SYN_Y2] = expf( -dt / tau2 );
+
+		synConstants[SYN_EK]  = esyn[syn];
+		synConstants[SYN_MOD] = 1;
+
+		if (tau1 == tau2)
+			synConstants[SYN_NORM] = gmax[syn] * expf(1.0) / tau1; // TODO: 1?
+		else {
+			ftype tpeak = tau1 * tau2 * logf( tau1/tau2 ) / ( tau1-tau2 );
+			synConstants[SYN_NORM] =
+					gmax[syn] * ( tau1-tau2 ) /	( tau1 * tau2 * ( expf( -tpeak / tau1 ) - expf( -tpeak / tau2 ) ) );
+		}
+
+		synConstants += SYN_CONST_N;
+	}
+
+	synState = new ftype[synapseListSize * SYN_STATE_N];
+	for (int syn=0; syn < synapseListSize; syn++) {
+		synState[SYN_STATE_X] = 0;
+		synState[SYN_STATE_Y] = 0;
+
+		synState += SYN_STATE_N;
+	}
+
+	synState     -= SYN_STATE_N * synapseListSize;
+	synConstants -= SYN_CONST_N * synapseListSize;
+}
+
+void SynapticChannels::clearSynapticActivationList() {
+
+	for (int syn=0; syn < synapseListSize; syn++)
+		for (int i=0; i < activationListSize; i++)
+			activationList[syn * activationListSize + i] = 0;
+}
+
+
+
 void SynapticChannels::updateSpikeList(ftype time) {
 
 	// Removes old spikes and finds number of spikes
@@ -410,7 +511,38 @@ void SynapticChannels::addSpikeList(ucomp synapse, int nGeneratedSpikes, ftype *
 
 }
 
-void SynapticChannels::evaluateCurrents(ftype currTime) {
+void SynapticChannels::evaluateCurrentsNew(ftype currTime) {
+
+	for (int syn=0; syn < synapseListSize; syn++) {
+		int currPos = (syn * activationListSize) + activationListPos[syn];
+		ftype activation = activationList[ currPos ];
+		activationList[ currPos ] = 0;
+
+		activationListPos[syn] = (activationListPos[syn] + 1) % activationListSize;
+
+		int synComp = synapseCompList[syn];
+
+		synState[SYN_STATE_X] = synConstants[SYN_MOD] * activation * synConstants[SYN_X1] + synState[SYN_STATE_X] * synConstants[SYN_X2];
+		synState[SYN_STATE_Y] = synState[SYN_STATE_X] * synConstants[SYN_Y1] + synState[SYN_STATE_Y] * synConstants[SYN_Y2];
+
+		ftype gsyn = synState[SYN_STATE_Y] * synConstants[SYN_NORM];
+
+		synapticCurrent[synComp] += (vmList[synComp] - synConstants[SYN_EK]) * gsyn;
+		//synCurrentTmp[synapseListSize + syn] += (vmList[synComp] - synConstants[SYN_EK]) * gsyn; // Used only for testing
+
+		synState     += SYN_STATE_N;
+		synConstants += SYN_CONST_N;
+	}
+
+	synState     -= SYN_STATE_N * synapseListSize;
+	synConstants -= SYN_CONST_N * synapseListSize;
+}
+
+
+void SynapticChannels::evaluateCurrents(ftype currTime, int type, int neuron) {
+
+//	for (int i=0; i < synapseListSize*synapseListSize; i++)
+//		synCurrentTmp[i] = 0;
 
 	if (spikeListSize > 0) {
 		for (int syn=0, spike=0; syn < synapseListSize; syn++) {
@@ -430,9 +562,18 @@ void SynapticChannels::evaluateCurrents(ftype currTime) {
 					ftype current = this->getCurrent(
 							synapseTypeList[syn], spikeList[spike], synapseWeightList[spike], synComp, currTime);
 					synapticCurrent [synComp] += current;
+
+					//synCurrentTmp[syn] += current; // Used only for testing
 				}
 			}
 		}
 	}
 
+//	evaluateCurrentsNew(currTime);
+//	if (type == 0 && neuron == 0) {
+//		for (int syn=0; syn < synapseListSize; syn++)
+//			if (synCurrentTmp[syn] != synCurrentTmp[syn+synapseListSize])
+//				printf ("[%d|%d|%d] time=%8.2f old=%12.8f new=%12.8f diff=%12.6f\n", type, neuron, syn, currTime, synCurrentTmp[syn], synCurrentTmp[syn+synapseListSize],
+//						(synCurrentTmp[syn] / synCurrentTmp[syn+synapseListSize] - 1) * 100);
+//	}
 }

@@ -120,7 +120,7 @@ ThreadInfo *createInfoArray(int nThreads, ThreadInfo *model){
 	return tInfoArray;
 }
 
-void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, char & mode, int & nKernelSteps)
+void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, char & mode)
 {
 
 	int nComp = 4;
@@ -309,14 +309,14 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 				}
 			}
 
-			if (simType[3] != 0) {
-				int batch[] = { 0, 100, 75, 50, 25, 10, 5, 1};
-				char *posChar = new char[1];
-				posChar[0] = simType[3];
-				int pos = atoi(posChar);
-				nKernelSteps = batch[pos];
-				delete[] posChar;
-			}
+//			if (simType[3] != 0) {
+//				int batch[] = { 0, 100, 75, 50, 25, 10, 5, 1};
+//				char *posChar = new char[1];
+//				posChar[0] = simType[3];
+//				int pos = atoi(posChar);
+//				nKernelSteps = batch[pos];
+//				delete[] posChar;
+//			}
 
 		}
 }
@@ -358,11 +358,11 @@ int main(int argc, char **argv) {
 	int nThreads = atoi(argv[4]);
 	assert ( 0 < nThreads && nThreads < 32);
 
-	int nKernelSteps = 100;
+	//int nKernelSteps = 100;
 	ThreadInfo *tInfo = new ThreadInfo;
 	tInfo->sharedData = new SharedNeuronGpuData;
     tInfo->sharedData->kernelInfo = new KernelInfo;
-	tInfo->sharedData->kernelInfo->nKernelSteps = nKernelSteps;
+	//tInfo->sharedData->kernelInfo->nKernelSteps = nKernelSteps;
 
 	tInfo->currProcess = currentProcess;
 	tInfo->nProcesses 	= nProcesses;
@@ -380,7 +380,7 @@ int main(int argc, char **argv) {
 
 	tInfo->sharedData->randBuf = new random_data *[nThreads];
 
-	benchConf.assertResultsAll = 0; // TODO: was 1
+	benchConf.assertResultsAll = 1; // TODO: was 1
 	benchConf.printSampleVms = 0;
 	benchConf.printAllVmKernelFinish = 0;
 	benchConf.printAllSpikeTimes = 1;
@@ -390,9 +390,9 @@ int main(int argc, char **argv) {
 	if (argc > 6)
 	  tInfo->sharedData->globalSeed = atoi(argv[6])*123;
 
-	// Configure the simulation
+	// Configure the simulationSteps
     char *simType = argv[5];
-	configureSimulation(simType, tInfo, nNeurons, mode, nKernelSteps);
+	configureSimulation(simType, tInfo, nNeurons, mode);
 
 	pthread_t *thread1 = new pthread_t[nThreads];
 	ThreadInfo *tInfoArray = createInfoArray(nThreads, tInfo);

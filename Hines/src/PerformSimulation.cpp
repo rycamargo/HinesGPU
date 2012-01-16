@@ -28,7 +28,17 @@ PerformSimulation::PerformSimulation(ThreadInfo *tInfo) {
 	this->kernelInfo = tInfo->sharedData->kernelInfo;
 }
 
-void PerformSimulation::createNeurons( ) {
+void PerformSimulation::createActivationLists( ) {
+
+	int listSize = sharedData->maxDelay / sharedData->dt;
+
+	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+		for (int target = 0; target < tInfo->nNeurons[type]; target++)
+			sharedData->matrixList[type][target].synapticChannels->configureSynapticActivationList( sharedData->dt, listSize );
+}
+
+void PerformSimulation::createNeurons( ftype dt ) {
+
 
 	SharedNeuronGpuData *sharedData = tInfo->sharedData;
 
@@ -51,6 +61,9 @@ void PerformSimulation::createNeurons( ) {
                 m.defineNeuronTreeN(nComp, 1);
 
             m.createTestMatrix();
+            m.dt     = dt;
+            m.neuron = n;
+            m.type   = type;
         }
     }
 
@@ -248,6 +261,11 @@ void PerformSimulation::updateGenSpkStatistics(int *& nNeurons, SynapticData *& 
 
 void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & randomSpkInfo )
 {
+
+	ftype currTime    = sharedData->dt * (tInfo->kStep + kernelInfo->nKernelSteps);
+	ftype randWeight  = 1;
+	ucomp randSynapse = 0;
+
 	randomSpkInfo.listSize =
 			3 * sharedData->inputSpikeRate * kernelInfo->nKernelSteps *
 			sharedData->dt * tInfo->nNeurons[type];
@@ -262,12 +280,12 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 				HinesMatrix & m = sharedData->matrixList[type][neuron];
 
 				if ((tInfo->kStep + kernelSteps)*m.dt > 9.9999 && sharedData->typeList[type] == PYRAMIDAL_CELL) {
-					int32_t spkTime;
-
-					random_r(sharedData->randBuf[tInfo->threadNumber], &spkTime);
+					int32_t randValue;
+					random_r(sharedData->randBuf[tInfo->threadNumber], &randValue);
 					ftype rate = (sharedData->inputSpikeRate) * (kernelSteps * dt);
-					if (spkTime / (float) RAND_MAX < rate ) {
-						spkTime = (tInfo->kStep + kernelSteps)*dt + (ftype)spkTime/RAND_MAX * (kernelSteps * dt);
+					ftype kPos = (ftype)randValue/RAND_MAX;
+					if ( kPos < rate ) {
+						ftype spkTime = currTime + (int)( kPos * kernelSteps ) * dt;
 
 						if (benchConf.simCommMode == NN_GPU) {
 							assert(randomSpkInfo.nRandom < randomSpkInfo.listSize);
@@ -275,8 +293,15 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 							randomSpkInfo.spikeDest[randomSpkInfo.nRandom] = neuron;
 						}
 						randomSpkInfo.nRandom++;
-						if (benchConf.simCommMode == NN_CPU)
-							m.synapticChannels->addSpike(0, spkTime, 1);
+						if (benchConf.simCommMode == NN_CPU) {
+							// Old implementation (ucomp synapse, ftype time, ftype weight)
+							m.synapticChannels->addSpike(randSynapse, spkTime, randWeight);
+							// New implementation
+							//if (type ==0 && neuron == 0)
+							//    printf("randomSpike at %.2f.\n", spkTime);
+							m.synapticChannels->addToSynapticActivationList(currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
+						}
+
 					}
 				}
 			}
@@ -299,7 +324,12 @@ int PerformSimulation::launchExecution() {
 	/**------------------------------------------------------------------------------------
 	 * Creates the neurons that will be simulated by the threads
 	 *-------------------------------------------------------------------------------------*/
-    createNeurons();
+    sharedData->dt = 0.1; // 0.1ms
+    sharedData->minDelay = 10; // 10ms
+    sharedData->maxDelay = 20; // 10ms
+	kernelInfo->nKernelSteps = sharedData->minDelay / sharedData->dt;
+
+    createNeurons(sharedData->dt);
 
 	printf("process = %d | threadNumber = %d | types [%d|%d] | seed=%d \n", tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread, tInfo->sharedData->globalSeed);
 
@@ -345,6 +375,9 @@ int PerformSimulation::launchExecution() {
 	 *--------------------------------------------------------------*/
     if (benchConf.simProcMode == NN_GPU)
     	gpuSimulation->prepareSynapses();
+
+	if (benchConf.simCommMode == NN_CPU)
+		createActivationLists();
 
     SynapticData *synData = sharedData->synData;
     int nKernelSteps = kernelInfo->nKernelSteps;

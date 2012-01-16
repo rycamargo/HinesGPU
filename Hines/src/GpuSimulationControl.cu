@@ -666,7 +666,6 @@ void GpuSimulationControl::configureGpuKernel()
 
 void GpuSimulationControl::updateSharedDataInfo()
 {
-    sharedData->dt = sharedData->matrixList[tInfo->startTypeThread][0].dt;
     sharedData->hList = new HinesStruct*[tInfo->totalTypes];
     sharedData->hGpu = new HinesStruct*[tInfo->totalTypes];
     sharedData->synData = new SynapticData;

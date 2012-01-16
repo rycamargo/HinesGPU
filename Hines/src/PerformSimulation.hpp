@@ -28,7 +28,8 @@ public:
 private:
     void syncCpuThreads();
     void updateBenchmark();
-    void createNeurons();
+    void createNeurons( ftype dt );
+    void createActivationLists( );
     void initializeThreadInformation();
     void updateGenSpkStatistics(int *& nNeurons, SynapticData *& synData);
     void generateRandomSpikes(int type, RandomSpikeInfo & randomSpkInfo);

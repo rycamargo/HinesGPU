@@ -240,6 +240,8 @@ typedef struct {
 
 	ftype totalTime;
 	ftype dt;
+	ftype minDelay; // connectionDelay
+	ftype maxDelay; // connectionDelay
 
 	unsigned int globalSeed;
 

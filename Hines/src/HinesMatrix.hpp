@@ -24,6 +24,10 @@ using namespace std;
 class HinesMatrix {
 
 public:
+
+	int neuron;
+	int type;
+
 	ftype *memory;
 	ucomp *ucompMemory;
 

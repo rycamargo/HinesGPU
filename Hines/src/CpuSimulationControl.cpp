@@ -93,6 +93,13 @@ void CpuSimulationControl::performCPUCommunication(int type, int maxSpikesNeuron
 void CpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 {
 
+	ftype currTime = sharedData->dt * (tInfo->kStep + kernelInfo->nKernelSteps);
+	// Clear the activation list of all target neurons
+//	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+//		for (int target = 0; target < tInfo->nNeurons[type]; target++)
+//			sharedData->matrixList[type][target].synapticChannels->clearSynapticActivationList();
+
+
 	if( benchConf.simProcMode == NN_CPU && tInfo->nProcesses == 1) {
 
 		for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
@@ -107,7 +114,17 @@ void CpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 					for (unsigned int conn=0; conn<connList.size(); conn++) {
 						Conn & connStruct = connList[conn];
 						SynapticChannels *targetSynapse = sharedData->matrixList[ connStruct.dest / CONN_NEURON_TYPE ][ connStruct.dest % CONN_NEURON_TYPE ].synapticChannels;
+						// Old implementation
 						targetSynapse->addSpikeList(connStruct.synapse, nGeneratedSpikes, spikeTimes, connStruct.delay, connStruct.weigth);
+						// New implementation
+						for (int spk=0; spk < nGeneratedSpikes; spk++) {
+							targetSynapse->addToSynapticActivationList(currTime, sharedData->dt, connStruct.synapse, spikeTimes[spk], connStruct.delay, connStruct.weigth);
+//							if ( connStruct.dest/CONN_NEURON_TYPE == 0 && connStruct.dest%CONN_NEURON_TYPE == 0) {
+//								if (connStruct.synapse == 0)
+//									printf("Added spike at time %.2f.\n", spikeTimes[spk] + connStruct.delay);
+//							}
+
+						}
 					}
 				}
 

@@ -295,19 +295,6 @@ void SynapticChannels::updateSpikeListGpu(ftype time, ftype *spikeListGlobal,
 	pthread_mutex_unlock (&addSpikeMutex);
 }
 
-//void SynapticChannels::addToSynapticActivationList(
-//		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight) {
-//
-//	pthread_mutex_lock (&addSpikeMutex);
-////	ftype fpos = (spikeTime + delay - currTime) / dt;
-////	ucomp pos = fpos;
-////	if ( (fpos - pos) > 0.5 ) pos++;
-//	ucomp pos = (spikeTime + delay - currTime) / dt + 1;
-//	pos = (activationListPos[synapse] + pos) % activationListSize;
-//	activationList[synapse * activationListSize + pos] += weight / dt;
-//	pthread_mutex_unlock (&addSpikeMutex);
-//}
-
 void SynapticChannels::addToSynapticActivationList(
 		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight) {
 
@@ -331,13 +318,31 @@ void SynapticChannels::configureSynapticActivationList(ftype dt, int listSize) {
 	if (activationList != 0)
 		delete[] activationList;
 
+	synapseListSize = 2;
 	activationListSize = listSize;
-	activationListPos = new ucomp[synapseListSize];
+
+	synapseCompList = new ucomp[2*synapseListSize];
+	synapseTypeList = synapseCompList + synapseListSize;
+	synapseCompList[0] = 0;
+	synapseCompList[1] = 3; // TODO: should be ncomp-1
+	synapseTypeList[0] = SYNAPSE_AMPA;
+	synapseTypeList[1] = SYNAPSE_GABA;
+
+	activationListPos    = new ucomp[synapseListSize];
+	activationListPos[0] = 0;
+	activationListPos[1] = 0;
+
 	activationList = new ftype[synapseListSize * activationListSize];
-	for (int syn=0; syn < synapseListSize; syn++) {
-		activationListPos[syn] = 0;
+	for (int syn=0; syn < synapseListSize; syn++)
 		for (int i=0; i < activationListSize; i++)
 			activationList[syn * activationListSize + i] = 0;
+
+	synState = new ftype[synapseListSize * SYN_STATE_N];
+	for (int syn=0; syn < synapseListSize; syn++) {
+		synState[SYN_STATE_X] = 0;
+		synState[SYN_STATE_Y] = 0;
+
+		synState += SYN_STATE_N;
 	}
 
 	// TODO: used only for testing
@@ -366,14 +371,6 @@ void SynapticChannels::configureSynapticActivationList(ftype dt, int listSize) {
 		}
 
 		synConstants += SYN_CONST_N;
-	}
-
-	synState = new ftype[synapseListSize * SYN_STATE_N];
-	for (int syn=0; syn < synapseListSize; syn++) {
-		synState[SYN_STATE_X] = 0;
-		synState[SYN_STATE_Y] = 0;
-
-		synState += SYN_STATE_N;
 	}
 
 	synState     -= SYN_STATE_N * synapseListSize;

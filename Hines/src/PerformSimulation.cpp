@@ -297,8 +297,8 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 							// Old implementation (ucomp synapse, ftype time, ftype weight)
 							m.synapticChannels->addSpike(randSynapse, spkTime, randWeight);
 							// New implementation
-							//if (type ==0 && neuron == 0)
-							//    printf("randomSpike at %.2f.\n", spkTime);
+							if (type ==0 && neuron == 0)
+							    printf("randomSpike at %.2f.\n", spkTime);
 							m.synapticChannels->addToSynapticActivationList(currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
 						}
 
@@ -341,6 +341,21 @@ int PerformSimulation::launchExecution() {
     if(threadNumber == 0)
     	gpuSimulation->updateSharedDataInfo();
 
+    /*--------------------------------------------------------------
+	 * Creates the connections between the neurons
+	 *--------------------------------------------------------------*/
+    if (threadNumber == 0) {
+		sharedData->connection = new Connections();
+		sharedData->connection->connectRandom (tInfo );
+
+		if (benchConf.simCommMode == NN_GPU) {
+			sharedData->connGpuListHost   = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
+			sharedData->connGpuListDevice = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
+		}
+
+		sharedData->connInfo = sharedData->connection->getConnectionInfo();
+	}
+
     //Synchronize threads before starting
     syncCpuThreads();
 
@@ -361,6 +376,10 @@ int PerformSimulation::launchExecution() {
         bench.totalConnWait = 0;
         bench.totalConnWrite = 0;
     }
+
+	//if (benchConf.simCommMode == NN_CPU) TODO: should be created only for CPU execution?
+	createActivationLists();
+
     /*--------------------------------------------------------------
 	 * Allocates the memory on the GPU for neuron information and transfers the data
 	 *--------------------------------------------------------------*/
@@ -376,9 +395,6 @@ int PerformSimulation::launchExecution() {
     if (benchConf.simProcMode == NN_GPU)
     	gpuSimulation->prepareSynapses();
 
-	if (benchConf.simCommMode == NN_CPU)
-		createActivationLists();
-
     SynapticData *synData = sharedData->synData;
     int nKernelSteps = kernelInfo->nKernelSteps;
 
@@ -389,7 +405,7 @@ int PerformSimulation::launchExecution() {
     	for(int type = startTypeThread;type < endTypeThread;type++){
     		cudaMalloc((void**)((((&(sharedData->hGpu[type]))))), sizeof (HinesStruct) * nNeurons[type]);
     		cudaMemcpy(sharedData->hGpu[type], sharedData->hList[type], sizeof (HinesStruct) * nNeurons[type], cudaMemcpyHostToDevice);
-    		checkCUDAError("Memory Allocation:");
+    		checkCUDAError("Memory Allocation [hGPU]:");
     	}
     }
 
@@ -408,21 +424,6 @@ int PerformSimulation::launchExecution() {
     			printf("Spike List size of %.3f MB for each type.\n", sizeof (ftype) * neuronSpikeListSize / 1024. / 1024.);
     	}
     }
-
-    /*--------------------------------------------------------------
-	 * Creates the connections between the neurons
-	 *--------------------------------------------------------------*/
-    if (threadNumber == 0) {
-		sharedData->connection = new Connections();
-		sharedData->connection->connectRandom (tInfo );
-
-		if (benchConf.simCommMode == NN_GPU) {
-			sharedData->connGpuListHost   = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
-			sharedData->connGpuListDevice = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
-		}
-
-		sharedData->connInfo = sharedData->connection->getConnectionInfo();
-	}
 
     /*--------------------------------------------------------------
 	 * [MPI] Send the connection list to other MPI processes
@@ -531,6 +532,28 @@ int PerformSimulation::launchExecution() {
 		 * Used only for communication processing in the CPU
 		 *--------------------------------------------------------------*/
 		if (benchConf.simCommMode == NN_CPU) {
+
+			if (benchConf.simProcMode == NN_GPU) {
+				// TODO: should be removed after implementing in the GPU
+				for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
+					for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
+						//SynapticChannels *ch = sharedData->matrixList[type][source].synapticChannels;
+						//for (int syn=0; syn < ch->synapseListSize; syn++)
+						//    ch->activationListPos[syn] = (ch->activationListPos[syn] + nKernelSteps) % ch->activationListSize;
+						SynapticChannels *synChannel = sharedData->matrixList[type][neuron].synapticChannels;
+
+						cudaMemcpy(synChannel->activationList, sharedData->hList[type][neuron].activationList,
+								sizeof(ftype) * synChannel->synapseListSize * synChannel->activationListSize, cudaMemcpyDeviceToHost);
+
+						cudaMemcpy(synChannel->activationListPos, sharedData->hList[type][neuron].activationListPos,
+								sizeof(ucomp) * synChannel->synapseListSize, cudaMemcpyDeviceToHost);
+
+						if ( type == 0 && neuron == 0)
+								printf("Copied GPU activiontPosData.\n");
+					}
+				syncCpuThreads();
+			}
+
 			cpuSimulation->addReceivedSpikesToTargetChannelCPU();
 			syncCpuThreads();
 		}
@@ -590,7 +613,21 @@ int PerformSimulation::launchExecution() {
 			if (benchConf.simCommMode == NN_GPU)
 				gpuSimulation->performGPUCommunications(type, randomSpkInfo);
 
-			else if (benchConf.simCommMode == NN_CPU) {
+			else if (benchConf.simCommMode == NN_CPU ) {
+
+				if (benchConf.simProcMode == NN_GPU) {
+					printf("Copying activation lists to the GPU!\n");
+					for (int neuron=0; neuron<nNeurons[type]; neuron++) {
+						SynapticChannels *synChannel = sharedData->matrixList[type][neuron].synapticChannels;
+
+						cudaMemcpy(sharedData->hList[type][neuron].activationList, synChannel->activationList,
+								sizeof(ftype) * synChannel->synapseListSize * synChannel->activationListSize, cudaMemcpyHostToDevice);
+
+						//cudaMemcpy(sharedData->hList[type][neuron].activationListPos, synChannel->activationListPos,
+						//		sizeof(ucomp) * synChannel->synapseListSize, cudaMemcpyHostToDevice);
+					}
+				}
+
 				cpuSimulation->performCPUCommunication(type, maxSpikesNeuron, randomSpkInfo.nRandom);
 
 				//Copy synaptic and spike info into the GPU

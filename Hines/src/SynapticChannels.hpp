@@ -84,16 +84,10 @@ public:
 	int *nDelieveredSpikes;
 	int nRandom;
 
-	/**
-	 * Compartment where each synapse channel is located
-	 */
-	ucomp *synapseCompList;
 
-	/**
-	 * The type of each synaptic channel from synapseCompList. The types are defined
-	 * in the header of this file
-	 */
-	ucomp *synapseTypeList;
+
+
+
 
 	/**
 	 * The start position in the spikeList for each synapse from synapseList
@@ -127,14 +121,16 @@ public:
 	/**
 	 * Contains the activation of each synapse at each time step
 	 */
-	ftype *activationList;
-	ftype *synConstants;
-	ftype *synState;
+	ftype *synConstants;	// shared?
 
-	// TODO: used only for testing
-	ftype *synCurrentTmp;
+	ftype *synState; 		// exclusive
+	ftype *activationList; 	// exclusive
 
-	ucomp *activationListPos;
+	ucomp *activationListPos; // exclusive
+
+	ucomp *synapseCompList;   //Compartment where each synapse channel is located
+	ucomp *synapseTypeList; // The type of each synaptic channel from synapseCompList
+
 	int activationListSize;
 
 	void addToSynapticActivationList(ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight);
@@ -142,6 +138,9 @@ public:
 	void configureSynapticActivationList(ftype dt, int listSize);
 
 	void evaluateCurrentsNew(ftype currTime);
+
+	// TODO: REMOVE ME used only for testing
+	ftype *synCurrentTmp;
 
 
 	/**

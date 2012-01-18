@@ -254,7 +254,7 @@ __device__ void moveCurrentSpikesG(HinesStruct *hList, ConnGpu connGpuDev, int n
 		 * Move the current spikes to the their final positions
 		 * TODO: Works only with 2 synapses, when synapse 0 is AMPA and synapse 1 is GABA!!!
 		 */
-		ftype remThresh = currTime - (3 * (h.tau[2*syn] + h.tau[2*syn+1]) );
+		ftype remThresh = currTime - 100; // TODO: (3 * (h.tau[2*syn] + h.tau[2*syn+1]) );
 		int synPos = syn * connGpuDev.nNeuronsGroup + threadIdx.x;
 
 		if ( startPosCurr[synPos] <= synSpikeListPos[syn]) {
@@ -319,7 +319,7 @@ __device__ void countCurrentSpikesG(HinesStruct *hList, ConnGpu connGpuDev, int 
 	for (int syn = 0; syn<synapseListSize; syn++) {
 
 		int nSpikesToKeep = 0;
-		ftype remThresh = currTime - (3 * (h.tau[2*syn] + h.tau[2*syn+1]) );
+		ftype remThresh = currTime - 100; // TODO: (3 * (h.tau[2*syn] + h.tau[2*syn+1]) );
 
 		int spk = synSpikeListPos[syn];
 		int lastSpk = (syn < synapseListSize-1) ? synSpikeListPos[syn+1] : spikeListSizeGlobal[neuron];

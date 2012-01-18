@@ -39,76 +39,105 @@
  * This part is executed in every integration step
  ***************************************************************************/
 
-__device__ ftype getCurrent(ftype vm, ucomp synType, ftype spikeTime, ftype weight,
-		ftype currTime, ftype *sTau, ftype *sGmax, ftype *sEsyn) {
+__device__ void evaluateSynapticCurrentsNew( HinesStruct *hList, ftype *active, ftype *vmList,
+		ftype currTime,	int synapseListSize, ftype *synConstants, ftype *synState, ucomp *synapseCompList,
+		int activationListSize, ftype *activationList, ucomp *activationListPos ) {
 
-	ftype gsyn = 0;
-	ftype current = 0;
-	if (synType == SYNAPSE_AMPA) {
-		ftype r = (currTime - spikeTime) / sTau[2*SYNAPSE_AMPA];
-		gsyn = sGmax[SYNAPSE_AMPA] * r * expf(1 - r) * weight;
-		//current = (vmListLocal[POS(comp)] - sEsyn[SYNAPSE_AMPA]) * gsyn;
-		current = (vm - sEsyn[SYNAPSE_AMPA]) * gsyn;
+	for (int syn=0; syn < synapseListSize; syn++) {
+		int currPos = (syn * activationListSize) + activationListPos[syn];
+		ftype activation = activationList[ currPos ];
+		activationList[ currPos ] = 0;
+
+		activationListPos[syn] = (activationListPos[syn] + 1) % activationListSize;
+
+		int synComp = synapseCompList[syn];
+
+		// TODO: problem is in one of the lines below
+		synState[SYN_STATE_X] = synConstants[SYN_MOD] * activation * synConstants[SYN_X1] + synState[SYN_STATE_X] * synConstants[SYN_X2];
+		synState[SYN_STATE_Y] = synState[SYN_STATE_X] * synConstants[SYN_Y1] + synState[SYN_STATE_Y] * synConstants[SYN_Y2];
+
+		ftype gsyn = synState[SYN_STATE_Y] * synConstants[SYN_NORM];
+
+		active[POS(synComp)] += (vmList[POS(synComp)] - synConstants[SYN_EK]) * gsyn;
+
+		synState     += SYN_STATE_N;
+		synConstants += SYN_CONST_N;
 	}
 
-	else if (synType == SYNAPSE_GABA) {
-		ftype r = (currTime - spikeTime) / sTau[2*SYNAPSE_GABA];
-		gsyn = sGmax[SYNAPSE_GABA] * r * expf(1 - r) * weight;
-		//current = (vmListLocal[POS(comp)] - sEsyn[SYNAPSE_GABA]) * gsyn;
-		current = (vm - sEsyn[SYNAPSE_GABA]) * gsyn;
-	}
-
-	return current;
+	synState     -= SYN_STATE_N * synapseListSize;
+	synConstants -= SYN_CONST_N * synapseListSize;
 }
 
-__device__ void findSynapticCurrents(HinesStruct *hList, ftype *active, ftype *vmListLocal,
-		ftype currTime, ftype *sTau, ftype *sGmax, ftype *sEsyn, ftype* freemem) {
-
-	//ftype *freeMem;
-
-	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
-	HinesStruct & h = hList[neuron];
-	int nNeurons = h.nNeurons;
-
-	int synapseListSize = h.synapseListSize;
-	int spikeListSize   = h.spikeListSize;
-
-	ftype *spikeList = h.spikeList;
-	ftype *synapseWeightList = h.synapseWeightList;
-
-	if (spikeListSize > 0) {
-
-		int spike = h.synSpikeListPos[0];
-		for (int syn=0; syn < synapseListSize; syn++) {
-			int synComp = h.synapseCompList[syn];
-			int lastSpikePos = ( syn < (synapseListSize-1) ) ?
-					h.synSpikeListPos[syn+1] : h.synSpikeListPos[0] + spikeListSize;
-			ucomp synapseType = h.synapseTypeList[syn];
-
-			for (; spike < lastSpikePos; spike += 2 ) {
-
-				ftype spk1 = spikeList[neuron + spike * nNeurons];
-				ftype spk2 = (spike+1 < lastSpikePos) ? spikeList[neuron + (spike+1) * nNeurons] : 1e100000;
-				ftype w1   = synapseWeightList[neuron + spike * nNeurons];
-				ftype w2   = (spike+1 < lastSpikePos) ? synapseWeightList[neuron + (spike+1) * nNeurons] : 0;
-
-				ftype current = 0;
-				if (currTime >= spk1)
-					current += getCurrent(vmListLocal[synComp * blockDim.x + threadIdx.x],
-							synapseType, spk1, w1, currTime, sTau, sGmax, sEsyn);
-				if (currTime >= spk2)
-					current += getCurrent(vmListLocal[synComp * blockDim.x + threadIdx.x],
-							synapseType, spk2, w2, currTime, sTau, sGmax, sEsyn);
-
-				active [POS(synComp)] += current;
-			}
-
-
-			spike = lastSpikePos;
-		}
-	}
-
-}
+//__device__ ftype getCurrent(ftype vm, ucomp synType, ftype spikeTime, ftype weight,
+//		ftype currTime, ftype *sTau, ftype *sGmax, ftype *sEsyn) {
+//
+//	ftype gsyn = 0;
+//	ftype current = 0;
+//	if (synType == SYNAPSE_AMPA) {
+//		ftype r = (currTime - spikeTime) / sTau[2*SYNAPSE_AMPA];
+//		gsyn = sGmax[SYNAPSE_AMPA] * r * expf(1 - r) * weight;
+//		//current = (vmListLocal[POS(comp)] - sEsyn[SYNAPSE_AMPA]) * gsyn;
+//		current = (vm - sEsyn[SYNAPSE_AMPA]) * gsyn;
+//	}
+//
+//	else if (synType == SYNAPSE_GABA) {
+//		ftype r = (currTime - spikeTime) / sTau[2*SYNAPSE_GABA];
+//		gsyn = sGmax[SYNAPSE_GABA] * r * expf(1 - r) * weight;
+//		//current = (vmListLocal[POS(comp)] - sEsyn[SYNAPSE_GABA]) * gsyn;
+//		current = (vm - sEsyn[SYNAPSE_GABA]) * gsyn;
+//	}
+//
+//	return current;
+//}
+//
+//__device__ void findSynapticCurrents(HinesStruct *hList, ftype *active, ftype *vmListLocal,
+//		ftype currTime, ftype *sTau, ftype *sGmax, ftype *sEsyn, ftype* freemem) {
+//
+//	//ftype *freeMem;
+//
+//	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
+//	HinesStruct & h = hList[neuron];
+//	int nNeurons = h.nNeurons;
+//
+//	int synapseListSize = h.synapseListSize;
+//	int spikeListSize   = h.spikeListSize;
+//
+//	ftype *spikeList = h.spikeList;
+//	ftype *synapseWeightList = h.synapseWeightList;
+//
+//	if (spikeListSize > 0) {
+//
+//		int spike = h.synSpikeListPos[0];
+//		for (int syn=0; syn < synapseListSize; syn++) {
+//			int synComp = h.synapseCompList[syn];
+//			int lastSpikePos = ( syn < (synapseListSize-1) ) ?
+//					h.synSpikeListPos[syn+1] : h.synSpikeListPos[0] + spikeListSize;
+//			ucomp synapseType = h.synapseTypeList[syn];
+//
+//			for (; spike < lastSpikePos; spike += 2 ) {
+//
+//				ftype spk1 = spikeList[neuron + spike * nNeurons];
+//				ftype spk2 = (spike+1 < lastSpikePos) ? spikeList[neuron + (spike+1) * nNeurons] : 1e100000;
+//				ftype w1   = synapseWeightList[neuron + spike * nNeurons];
+//				ftype w2   = (spike+1 < lastSpikePos) ? synapseWeightList[neuron + (spike+1) * nNeurons] : 0;
+//
+//				ftype current = 0;
+//				if (currTime >= spk1)
+//					current += getCurrent(vmListLocal[synComp * blockDim.x + threadIdx.x],
+//							synapseType, spk1, w1, currTime, sTau, sGmax, sEsyn);
+//				if (currTime >= spk2)
+//					current += getCurrent(vmListLocal[synComp * blockDim.x + threadIdx.x],
+//							synapseType, spk2, w2, currTime, sTau, sGmax, sEsyn);
+//
+//				active [POS(synComp)] += current;
+//			}
+//
+//
+//			spike = lastSpikePos;
+//		}
+//	}
+//
+//}
 
 /**
  * Find the gate openings in the next time step
@@ -290,7 +319,6 @@ __device__ void evaluateCurrentsGNew( HinesStruct *hList, ftype *activeList, fty
 __device__ void upperTriangularizeAll(HinesStruct *hList, ftype *sTriangList,
 				ftype *sLeftList, ucomp *sLeftListLine, ucomp *sLeftListColumn,
 				ucomp *sLeftStartPos, ftype *rhsLocal, ftype *vmListLocal,
-				ftype *sTau, ftype *sGmax, ftype *sEsyn,
 
 				int nChannels, ucomp *channelInfo, ftype *channelEk, ftype *channelGbar, ftype *gatePar,
 				ucomp *gateInfo, ftype *gateState,
@@ -321,9 +349,9 @@ __device__ void upperTriangularizeAll(HinesStruct *hList, ftype *sTriangList,
 			channelInfo, channelEk, channelGbar, gatePar, gateInfo, gateState,
 			nComp, compListSize, compList, eLeak);
 
-	findSynapticCurrents(hList, active, vmListLocal, h.currStep * h.dt, sTau, sGmax, sEsyn,
-			freeMem );
-
+	evaluateSynapticCurrentsNew(hList, active, vmListLocal, h.currStep * h.dt,
+			h.synapseListSize, h.synConstants, h.synState, h.synapseCompList, 	//
+			h.activationListSize, h.activationList, h.activationListPos);
 
 	ftype dtRec = 1/h.dt;
 	//rhsLocal[POS(0)] = (-2) * vmListLocal[POS(0)] * Cm[0] * dtRec - curr[0] + active[POS(0)];
@@ -380,7 +408,6 @@ __device__ void upperTriangularizeAll(HinesStruct *hList, ftype *sTriangList,
 __device__ void updateRhsG(HinesStruct *hList, 
 						   ftype *sMulList, ucomp *sMulListComp, ucomp *sMulListDest,
 						   ftype *rhsLocal, ftype *vmListLocal,
-						   ftype *sTau, ftype *sGmax, ftype *sEsyn,
 
 						   int nChannels, ucomp *channelInfo, ftype *channelEk, ftype *channelGbar, ftype *gatePar,
 						   ucomp *gateInfo, ftype *gateState,
@@ -411,8 +438,9 @@ __device__ void updateRhsG(HinesStruct *hList,
 			nComp, compListSize, compList, eLeak);
 
 
-	findSynapticCurrents(hList, active, vmListLocal, h.currStep * h.dt, sTau, sGmax, sEsyn,
-			freeMem);
+	evaluateSynapticCurrentsNew(hList, active, vmListLocal, h.currStep * h.dt,
+			h.synapseListSize, h.synConstants, h.synState, h.synapseCompList, 	//
+			h.activationListSize, h.activationList, h.activationListPos);
 
 	ftype dtRec = 1/h.dt;
 	for (int i=0; i<nComp; i++)
@@ -482,18 +510,18 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 	int triangAll = h.triangAll;
 	int nGatesTotal = h.nGatesTotal;
 
-	if (h.currStep > 0) {
-		h.synSpikeListPos = spikeListPosGlobal + neuron * h.synapseListSize;
-		h.spikeList = spikeListGlobal;
-		h.synapseWeightList = weightListGlobal;
-		h.spikeListSize = spikeListStartGlobal[neuron];
-	}
-	else {
-		h.synSpikeListPos = 0;
-		h.spikeList = 0;
-		h.synapseWeightList = 0;
-		h.spikeListSize = 0;
-	}
+//	if (h.currStep > 0) {
+//		h.synSpikeListPos = spikeListPosGlobal + neuron * h.synapseListSize;
+//		h.spikeList = spikeListGlobal;
+//		h.synapseWeightList = weightListGlobal;
+//		h.spikeListSize = spikeListStartGlobal[neuron];
+//	}
+//	else {
+//		h.synSpikeListPos = 0;
+//		h.spikeList = 0;
+//		h.synapseWeightList = 0;
+//		h.spikeListSize = 0;
+//	}
 
 	/******************************************************************************************
 	 * Alocates the shared memory
@@ -517,12 +545,12 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 	ucomp *sChannelInfo    = &(sActiveCompList[h.compListSize]); // No significant speedup
 	ucomp *sGateInfo       = &(sChannelInfo[h.nChannels * N_CHANNEL_FIELDS]); // small speedup
 
-	int nChannelTypes = h.nChannelTypes;
-	ftype *sTau		= (ftype *)&(sGateInfo[nGatesTotal * N_GATE_FIELDS]);
-	ftype *sGmax 	= (ftype *)&(sTau[nChannelTypes*2]);
-	ftype *sEsyn 	= (ftype *)&(sGmax[nChannelTypes]);
+//	int nChannelTypes = h.nChannelTypes;
+//	ftype *sTau		= (ftype *)&(sGateInfo[nGatesTotal * N_GATE_FIELDS]);
+//	ftype *sGmax 	= (ftype *)&(sTau[nChannelTypes*2]);
+//	ftype *sEsyn 	= (ftype *)&(sGmax[nChannelTypes]);
 
-	ftype *lastSharedAddress = (ftype *)&(sEsyn[nChannelTypes]);
+	ftype *lastSharedAddress = (ftype *)&(sGateInfo[nGatesTotal * N_GATE_FIELDS]);
 
 	/******************************************************************************************
 	 * Allocate for each individual neuron
@@ -553,13 +581,13 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 	 * Initializaes the shared memory
 	 *******************************************************************************************/
 
-	for (int id=0; id < nChannelTypes; id++ ) {
-		sTau[2*id]   = h.tau[2*id];
-		sTau[2*id+1] = h.tau[2*id+1];
-		sGmax[id] 	 = h.gmax[id];
-		sEsyn[id] 	 = h.esyn[id];
-
-	}
+//	for (int id=0; id < nChannelTypes; id++ ) {
+//		sTau[2*id]   = h.tau[2*id];
+//		sTau[2*id+1] = h.tau[2*id+1];
+//		sGmax[id] 	 = h.gmax[id];
+//		sEsyn[id] 	 = h.esyn[id];
+//
+//	}
 
 	for (int k=0; k < nComp; k ++ )
 		sLeftStartPos[k] = h.leftStartPos[k];
@@ -613,7 +641,7 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 		//printf ("SolveMatrixG: Ok1\n");
 		if (triangAll == 0) {
 			updateRhsG(hList, sMulList, sMulListComp, sMulListDest,
-					rhsLocal, vmListLocal, sTau, sGmax, sEsyn,
+					   rhsLocal, vmListLocal,
 					   h.nChannels, sChannelInfo, h.channelEk, h.channelGbar, h.gatePar,
 					   sGateInfo, sGateState,
 					   h.compListSize, sActiveCompList, h.eLeak,
@@ -623,7 +651,7 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 		else {
 
 			upperTriangularizeAll(hList, sTriangList, sLeftList, sLeftListLine, sLeftListColumn,
-					sLeftStartPos, rhsLocal, vmListLocal, sTau, sGmax, sEsyn,
+					sLeftStartPos, rhsLocal, vmListLocal,
 					   h.nChannels, sChannelInfo, h.channelEk, h.channelGbar, h.gatePar,
 					   sGateInfo, sGateState,
 					   h.compListSize, sActiveCompList, h.eLeak,

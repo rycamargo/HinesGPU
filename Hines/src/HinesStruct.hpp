@@ -95,41 +95,58 @@ typedef struct {
 
 
 	/******************************************************************
-	 * Synaptic Channels
+	 * Synaptic Channels (OLD)
 	 ******************************************************************/
 
-	int nChannelTypes;
-	int synapseListSize;
+	//int nChannelTypes;
+	//int synapseListSize;
 	//Compartment where each synapse is located
-	ucomp *synapseCompList;
+	//ucomp *synapseCompList;
 	// The type of each synapse from synapseCompList.
-	ucomp *synapseTypeList;
+	//ucomp *synapseTypeList;
 
 
 	//The start position in the spikeList for each synapse from synapseList
-	//ucomp *synSpikeListPos;
-	int *synSpikeListPos;
+	//int *synSpikeListPos;
 	// Contains the spike list for each synapticChannel
-	ftype *spikeList;
-	int spikeListSize;
+	//ftype *spikeList;
+	//int spikeListSize;
 	// Contains the weight to consider for the synapse of each spike
-	ftype *synapseWeightList;
+	//ftype *synapseWeightList;
 
 	// Constants of the synaptic channels
-	ftype *tau, *gmax, *esyn;
+	//ftype *tau, *gmax, *esyn;
+
+	/******************************************************************
+	 * Synaptic Channels (NEW)
+	 ******************************************************************/
+
+	int synapseListSize;	// *
+
+	ftype *synConstants;	// shared *
+
+	ftype *synState; 		// exclusive *
+
+	ucomp *synapseCompList; // shared *
+	ucomp *synapseTypeList; // shared *
+
+	int activationListSize; // *
+	ftype *activationList; 	// exclusive *
+	ucomp *activationListPos; // exclusive *
+
 
 	/******************************************************************
 	 * Generated spikes
 	 ******************************************************************/
 
-	// Contains the time of the last spike generated on the neuron
-	ftype lastSpike;
 	// Contains the time of the spikes generated in the current execution block
 	ftype *spikeTimes;
 	int spikeTimeListSize;
 	// Number of spikes generated in the current block (not a vector, just a pointer to a memory location)
 	ucomp *nGeneratedSpikes;
 
+	// Contains the time of the last spike generated on the neuron
+	ftype lastSpike;
 	ftype threshold; // in mV
 	ftype minSpikeInterval; // in mV
 

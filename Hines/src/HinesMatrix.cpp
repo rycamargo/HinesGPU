@@ -464,6 +464,7 @@ void HinesMatrix::upperTriangularizeAll() {
 
 	if (synapticChannels != 0)
 		synapticChannels->evaluateCurrentsNew(currStep * dt);
+		//synapticChannels->evaluateCurrents(currStep * dt, type, neuron);
 
 	for (int i=0; i<nComp; i++)
 		rhsM[i] = (-2) * vmList[i] * Cm[i] / dt - curr[i] + active[i];

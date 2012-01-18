@@ -162,20 +162,19 @@ int GpuSimulationControl::prepareExecution(int type) {
 	 * Allocates the ftype memory for all neurons and copies data to device
 	 *******************************************************************************************/
 	int fSharedMemMatrixSize    = sizeof(ftype) * (3*nComp + m0.mulListSize + m0.leftListSize); //+ nComp*nComp;
-	int fSharedMemSynapticSize  = sizeof(ftype) * 4 * m0.synapticChannels->nChannelTypes;
+	int fSharedMemSynapticSize  = sizeof(ftype) * nSynaptic * SYN_CONST_N;
 	int fSharedMemSize = fSharedMemMatrixSize + fSharedMemSynapticSize;
 
 	int fExclusiveMemMatrixSize   = sizeof(ftype) * (5*nComp + m0.leftListSize);
 	int fExclusiveMemActiveSize   = sizeof(ftype) * m0.activeChannels->ftypeMemSize;
-	//int fExclusiveMemActiveSize   = sizeof(ftype) * (nCompActive*7); // TODO: old active
-	//int exclusiveMemSynaptic = sizeof(ftype) * m.spikeTimeListSize;
-	int fExclusiveMemSize = fExclusiveMemMatrixSize + fExclusiveMemActiveSize + sizeof(ftype)*nComp*nKernelSteps;
+	int fExclusiveMemSynapticSize = sizeof(ftype) * nSynaptic * (SYN_STATE_N + m0.synapticChannels->activationListSize);
+	int fExclusiveMemSize = fExclusiveMemMatrixSize + fExclusiveMemActiveSize + fExclusiveMemSynapticSize + sizeof(ftype)*nComp*nKernelSteps;
 
 	printf("TotalMem = %10.3f MB %d %d %d\n",(fSharedMemSize + fExclusiveMemSize * nNeurons)/(1024.*1024.), fSharedMemSize, fExclusiveMemSize, nNeurons);
 	ftype *fMemory;
 	cudaMalloc((void **)(&(fMemory)), fSharedMemSize + fExclusiveMemSize * nNeurons);
 	ftype *fSharedMemMatrixAddress = m0.Cm;
-	ftype *fSharedMemSynapticAddress = m0.synapticChannels->tau;
+	ftype *fSharedMemSynapticAddress = m0.synapticChannels->synConstants;
 
 	cudaMemcpy(fMemory, fSharedMemMatrixAddress, fSharedMemMatrixSize, cudaMemcpyHostToDevice);
 	cudaMemcpy(fMemory+fSharedMemMatrixSize/sizeof(ftype), fSharedMemSynapticAddress, fSharedMemSynapticSize, cudaMemcpyHostToDevice);
@@ -184,10 +183,14 @@ int GpuSimulationControl::prepareExecution(int type) {
 	/******************************************************************************************
 	 * Allocates the ucomp memory for all neurons and copies data to device
 	 *******************************************************************************************/
+
+	int uExclusiveMemSynapticSize = sizeof(ucomp) * nSynaptic;
+	ucomp *uExclusiveMemSynaptic;
+	cudaMalloc((void **)(&(uExclusiveMemSynaptic)), uExclusiveMemSynapticSize * nNeurons);
+
 	int uMemMatrixSize    = sizeof(ucomp) * ((m0.mulListSize + m0.leftListSize) * 2 + nComp);
 	int uMemActiveSize    = sizeof(ucomp) * m0.activeChannels->ucompMemSize;
-	//int uMemActiveSize    = sizeof(ucomp) * nCompActive; // TODO: old active
-	int uMemSynapticSize  = sizeof(ucomp) * 3*nSynaptic;
+	int uMemSynapticSize  = sizeof(ucomp) * 2 * nSynaptic;
 	int uMemSize = uMemMatrixSize + uMemActiveSize + uMemSynapticSize;
 
 	ucomp *uMemory;
@@ -198,6 +201,8 @@ int GpuSimulationControl::prepareExecution(int type) {
 	cudaMemcpy(uMemory,             m0.ucompMemory,                       uMemMatrixSize,   cudaMemcpyHostToDevice);
 	cudaMemcpy(uMemActiveAddress,   m0.activeChannels->ucompMem,          uMemActiveSize,   cudaMemcpyHostToDevice);
 	cudaMemcpy(uMemSynapticAddress, m0.synapticChannels->synapseCompList, uMemSynapticSize, cudaMemcpyHostToDevice);
+
+	//cudaMemcpy(uMemSynapticAddress, m0.synapticChannels->synapseCompList, uMemSynapticSize, cudaMemcpyHostToDevice);
 	//cudaMemcpy(uMemActiveAddress,   m0.activeChannels->getCompList(),     uMemActiveSize,   cudaMemcpyHostToDevice); // TODO: old active
 
 	/******************************************************************************************
@@ -284,32 +289,42 @@ int GpuSimulationControl::prepareExecution(int type) {
 			h.channelInfo = h.compList    + h.compListSize;
 			h.gateInfo    = h.channelInfo + (h.nChannels * N_CHANNEL_FIELDS);
 		}
+		checkCUDAError("Memory Allocation after active:");
 
 		/****************************************************
 		 * Synaptic Channels
 		 ****************************************************/
 		if (m.synapticChannels != 0) {
 
-			h.synapseListSize = m.synapticChannels->synapseListSize;
-			h.nChannelTypes   = m.synapticChannels->nChannelTypes;
+			SynapticChannels *synChan = m.synapticChannels;
+			h.synapseListSize    = synChan->synapseListSize;
+			h.activationListSize = synChan->activationListSize;
+
 			h.synapseCompList = uMemSynapticAddress;
 			h.synapseTypeList = h.synapseCompList + h.synapseListSize;
-			//h.synSpikeListPos = h.synapseTypeList + h.synapseListSize;
 
-			h.spikeListSize 	= 0;
-			h.spikeList     	= 0;
-			h.synapseWeightList = 0;
+			h.synConstants = fMemory + fSharedMemMatrixSize/sizeof(ftype);
 
-			h.tau = fMemory+fSharedMemMatrixSize/sizeof(ftype);
-			h.gmax = h.tau  + 2 * m.synapticChannels->nChannelTypes;
-			h.esyn = h.gmax + m.synapticChannels->nChannelTypes;
+			// exclusive fmemory
+			h.synState = h.gatePar + h.nGatesTotal * N_GATE_FUNC_PAR;
+			cudaMemcpy(h.synState, synChan->synState,
+					sizeof(ftype) * h.synapseListSize * SYN_STATE_N, cudaMemcpyHostToDevice);
 
+			h.activationList = h.synState + h.synapseListSize * SYN_STATE_N; // h.synapseListSize * h.activationListSize;
+			// TODO: should not be necessary
+			cudaMemcpy(h.activationList, synChan->activationList,
+					sizeof(ftype) * h.synapseListSize * h.activationListSize, cudaMemcpyHostToDevice);
+
+			h.activationListPos = uExclusiveMemSynaptic + neuron * uExclusiveMemSynapticSize/sizeof(ucomp);
+			cudaMemcpy(h.activationListPos, synChan->activationListPos, uExclusiveMemSynapticSize, cudaMemcpyHostToDevice);
+
+			// Used for spike generation
 			h.lastSpike 		= m.lastSpike;
 			h.spikeTimeListSize = m.spikeTimeListSize;
-			h.threshold        = m.threshold;
-			h.minSpikeInterval = m.minSpikeInterval;
-
+			h.threshold         = m.threshold;
+			h.minSpikeInterval  = m.minSpikeInterval;
 		}
+		checkCUDAError("Memory Allocation after synaptic:");
 
 		//if (benchConf.simCommMode == NN_GPU)
 		sharedData->matrixList[type][neuron].freeMem();
@@ -496,6 +511,7 @@ void GpuSimulationControl::performGpuNeuronalProcessing() {
 		int nThreadsProc =  tInfo->nNeurons[type]/kernelInfo->nBlocksProc[type];
 		if (tInfo->nNeurons[type] % kernelInfo->nBlocksProc[type]) nThreadsProc++;
 
+		printf("launching kernel for type %d...\n", type);
 		checkCUDAError("Before SolveMatrixG Kernel:");
 		SynapticData *synData = sharedData->synData;
 

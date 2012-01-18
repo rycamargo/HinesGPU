@@ -221,6 +221,13 @@ typedef struct {
 	ftype **vmListHost;
 	ftype **vmListDevice;
 
+	ftype **activationListGlobal;
+	ucomp **activationListPosGlobal;
+	ftype **activationListDevice;
+	ucomp **activationListPosDevice;
+
+
+
 	int totalTypes;
 } SynapticData;
 

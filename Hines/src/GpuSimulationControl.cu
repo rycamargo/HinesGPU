@@ -25,13 +25,14 @@ extern int **countReceivedSpikesCpu(ConnGpu *connGpuList, int nNeurons, int nGro
 extern __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
 		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
 		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int *nReceivedSpikesGlobal0, int *nReceivedSpikesGlobal1);
-__global__ void performCommunicationsG_Step1(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
+extern __global__ void performCommunicationsG_Step1(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
 		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
 		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, ftype *tmpDevMemory);
-__global__ void performCommunicationsG_Step2(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
+extern __global__ void performCommunicationsG_Step2(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
 		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
 		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, ftype *tmpDevMemory);
-
+extern __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
+		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev, HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev);
 
 void checkCUDAError(const char *msg)
 {
@@ -75,6 +76,13 @@ void GpuSimulationControl::prepareSynapses() {
 		synData->spikeListPosGlobal  =  (int **) malloc (sizeof(int *) * totalTypes);
 		synData->spikeListSizeGlobal = (int **) malloc (sizeof(int *) * totalTypes);
 
+
+		synData->activationListGlobal    = (ftype **) malloc (sizeof(ftype *) * totalTypes); //*
+		synData->activationListPosGlobal = (ucomp **) malloc (sizeof(ucomp *) * totalTypes); //*
+		synData->activationListDevice    = (ftype **) malloc (sizeof(ftype *) * totalTypes); //*
+		synData->activationListPosDevice = (ucomp **) malloc (sizeof(ucomp *) * totalTypes); //*
+
+
 		synData->vmListHost    = (ftype **) malloc (sizeof(ftype *) * totalTypes);
 		synData->vmListDevice  = (ftype **) malloc (sizeof(ftype *) * totalTypes);
 
@@ -102,9 +110,28 @@ void GpuSimulationControl::prepareSynapses() {
 	 * - spikeListPos and spikeListSize
 	 */
 	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
+
+		SynapticChannels *syn0 = sharedData->matrixList[type][0].synapticChannels;
+		int globalActListSize = syn0->activationListSize * syn0->synapseListSize * nNeurons[type];
+		synData->activationListGlobal[type] = (ftype *) malloc (sizeof(ftype) * globalActListSize); //*
+		cudaMalloc ((void **) &(synData->activationListDevice[type]), sizeof(ftype) * globalActListSize); //*
+		for (int i=0; i < globalActListSize; i++)
+			synData->activationListGlobal[type][i] = 0;
+		cudaMemcpy (synData->activationListDevice[type], synData->activationListGlobal[type],
+				sizeof(ftype) * globalActListSize, cudaMemcpyHostToDevice); //*
+
+
+		synData->activationListPosGlobal[type] = (ucomp *) malloc (sizeof(ucomp) * syn0->synapseListSize * nNeurons[type]); //*
+		cudaMalloc ((void **) &(synData->activationListPosDevice[type]), sizeof(ucomp) * syn0->synapseListSize * nNeurons[type]); //*
+		for (int i=0; i<syn0->synapseListSize * nNeurons[type]; i++)
+			synData->activationListPosGlobal[type][i] = 0;
+		cudaMemcpy (synData->activationListPosDevice[type], synData->activationListPosGlobal[type],
+				sizeof(ucomp) * syn0->synapseListSize * nNeurons[type], cudaMemcpyHostToDevice); //*
+
+
 		synData->spikeListGlobal[type] = 0;
 		synData->weightListGlobal[type] = 0;
-		int totalListPosSize = 1 + sharedData->matrixList[type][0].synapticChannels->synapseListSize * nNeurons[type];
+		int totalListPosSize = 1 + syn0->synapseListSize * nNeurons[type];
 		synData->spikeListPosGlobal[type]  = (int *) malloc(sizeof(int) * totalListPosSize);
 		synData->spikeListSizeGlobal[type] = (int *) malloc(sizeof(int) * (nNeurons[type]+1));
 		cudaMalloc ((void **) &(synData->spikeListPosDevice[type]),  sizeof(int)  * totalListPosSize);
@@ -136,10 +163,15 @@ void GpuSimulationControl::prepareSynapses() {
 		synData->nGeneratedSpikesHost[type] = (ucomp *) malloc(sizeof(ucomp) * nNeurons[type]);
 		cudaMalloc ((void **) &(synData->nGeneratedSpikesDevice[type]), sizeof(ucomp) * nNeurons[type]);
 
+		int synapseListSize = sharedData->matrixList[type][0].synapticChannels->synapseListSize;
+
 		for (int neuron = 0; neuron < nNeurons[type]; neuron++ ) {
 			HinesStruct & h = sharedData->hList[type][neuron];
 			h.spikeTimes  = synData->genSpikeTimeListDevice[type] + spikeTimeListSize * neuron;
 			h.nGeneratedSpikes = synData->nGeneratedSpikesDevice[type];// + neuron;
+
+			h.activationList = synData->activationListDevice[type]; // global list
+			h.activationListPos = synData->activationListPosDevice[type] + synapseListSize * neuron;
 		}
 	}
 }
@@ -427,13 +459,23 @@ void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & 
 		nReceivedSpikesHost0 = (int *)malloc(sizeof(int) * nBlocksComm[type]);
 		nReceivedSpikesHost1 = (int *)malloc(sizeof(int) * nBlocksComm[type]);
 
-		//printf (" type=%d %d %d %d\n", type, tInfo->nNeurons[type], nThreadsComm, sharedMemSizeComm);
+//		__global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
+//				ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
+//				HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev)
+
+
 		performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(
 				tInfo->nNeurons[type], sharedData->connGpuListDevice[type],
 				synData->nGeneratedSpikesGpusDev[threadNumber], synData->genSpikeTimeListGpusDev[threadNumber],
-				sharedData->hGpu[type], synData->spikeListDevice[type], synData->weightListDevice[type],
-				synData->spikeListPosDevice[type], synData->spikeListSizeDevice[type],
-				randomSpikeTimesDev, randomSpikeDestDev, nReceivedSpikesDev0, nReceivedSpikesDev1);
+				sharedData->hGpu[type], randomSpikeTimesDev, randomSpikeDestDev);
+
+		//printf (" type=%d %d %d %d\n", type, tInfo->nNeurons[type], nThreadsComm, sharedMemSizeComm);
+//		performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(
+//				tInfo->nNeurons[type], sharedData->connGpuListDevice[type],
+//				synData->nGeneratedSpikesGpusDev[threadNumber], synData->genSpikeTimeListGpusDev[threadNumber],
+//				sharedData->hGpu[type], synData->spikeListDevice[type], synData->weightListDevice[type],
+//				synData->spikeListPosDevice[type], synData->spikeListSizeDevice[type],
+//				randomSpikeTimesDev, randomSpikeDestDev, nReceivedSpikesDev0, nReceivedSpikesDev1);
 
 		/**
 		 * TODO: Remove Me [MPI]
@@ -694,3 +736,27 @@ void GpuSimulationControl::updateSharedDataInfo()
     kernelInfo->nBlocksProc = new int[tInfo->totalTypes];
 }
 
+
+
+void GpuSimulationControl::addToInterleavedSynapticActivationList(
+		ftype *activationList, ucomp *activationListPos, int activationListSize, int neuron, int nNeurons,
+		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight) {
+
+	//pthread_mutex_lock (&addSpikeMutex);
+
+	ftype fpos = (spikeTime + delay - currTime) / dt;
+
+	ucomp pos  = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
+	pos       += synapse * activationListSize;
+
+	ucomp nextPos  = ( pos + 1 ) % activationListSize;
+	nextPos       += synapse * activationListSize;
+
+	ftype diff = fpos - (int)fpos;
+
+	// TODO: race conditions can occur here with multiple threads
+	activationList[    pos * nNeurons + neuron] += (weight / dt) * ( 1 - diff );
+	activationList[nextPos * nNeurons + neuron] += (weight / dt) * diff;
+
+	//pthread_mutex_unlock (&addSpikeMutex);
+}

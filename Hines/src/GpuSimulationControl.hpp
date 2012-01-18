@@ -44,6 +44,10 @@ public:
 
     void checkVmValues();
 
+    static void addToInterleavedSynapticActivationList(
+    		ftype *activationList, ucomp *activationListPos, int activationListSize, int neuron, int nNeurons,
+    		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight);
+
 };
 
 #endif /* GPUSIMULATIONCONTROL_H_ */

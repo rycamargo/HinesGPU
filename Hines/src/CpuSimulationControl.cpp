@@ -161,11 +161,24 @@ void CpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 				targetSynapse->addSpikeList(connInfo->synapse[conn], nGeneratedSpikes, spikeTimes, connInfo->delay[conn], connInfo->weigth[conn]);
 
 				for (int spk=0; spk < nGeneratedSpikes; spk++) {
-					targetSynapse->addToSynapticActivationList(currTime, sharedData->dt, connInfo->synapse[conn], spikeTimes[spk], connInfo->delay[conn], connInfo->weigth[conn]);
-					if ( dType == 0 && dNeuron == 0) {
-						if (connInfo->synapse[conn] == 0)
-							printf("-Added spike at time %.2f.\n", spikeTimes[spk] + connInfo->delay[conn]);
-					}
+
+//					addToInterleavedSynapticActivationList(
+//							ftype *globalActivationList, int activationListSize, int neuron, int nNeurons,
+//							ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight);
+
+					GpuSimulationControl::addToInterleavedSynapticActivationList(
+				    		sharedData->synData->activationListGlobal[dType],
+				    		sharedData->synData->activationListPosGlobal[dType] + dNeuron * targetSynapse->synapseListSize,
+				    		targetSynapse->activationListSize,
+				    		dNeuron, tInfo->nNeurons[dType], currTime, sharedData->dt,
+				    		connInfo->synapse[conn], spikeTimes[spk], connInfo->delay[conn], connInfo->weigth[conn]);
+
+					//targetSynapse->addToSynapticActivationList(currTime, sharedData->dt, connInfo->synapse[conn], spikeTimes[spk], connInfo->delay[conn], connInfo->weigth[conn]);
+
+//					if ( dType == 0 && dNeuron == 0) {
+//						if (connInfo->synapse[conn] == 0)
+//							printf("-Added spike at time %.2f.\n", spikeTimes[spk] + connInfo->delay[conn]);
+//					}
 
 				}
 

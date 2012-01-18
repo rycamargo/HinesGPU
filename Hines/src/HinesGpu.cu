@@ -43,8 +43,11 @@ __device__ void evaluateSynapticCurrentsNew( HinesStruct *hList, ftype *active, 
 		ftype currTime,	int synapseListSize, ftype *synConstants, ftype *synState, ucomp *synapseCompList,
 		int activationListSize, ftype *activationList, ucomp *activationListPos ) {
 
+	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
+
 	for (int syn=0; syn < synapseListSize; syn++) {
 		int currPos = (syn * activationListSize) + activationListPos[syn];
+		currPos = currPos * hList[neuron].nNeurons + neuron; // global interleave lList
 		ftype activation = activationList[ currPos ];
 		activationList[ currPos ] = 0;
 
@@ -68,117 +71,6 @@ __device__ void evaluateSynapticCurrentsNew( HinesStruct *hList, ftype *active, 
 	synConstants -= SYN_CONST_N * synapseListSize;
 }
 
-//__device__ ftype getCurrent(ftype vm, ucomp synType, ftype spikeTime, ftype weight,
-//		ftype currTime, ftype *sTau, ftype *sGmax, ftype *sEsyn) {
-//
-//	ftype gsyn = 0;
-//	ftype current = 0;
-//	if (synType == SYNAPSE_AMPA) {
-//		ftype r = (currTime - spikeTime) / sTau[2*SYNAPSE_AMPA];
-//		gsyn = sGmax[SYNAPSE_AMPA] * r * expf(1 - r) * weight;
-//		//current = (vmListLocal[POS(comp)] - sEsyn[SYNAPSE_AMPA]) * gsyn;
-//		current = (vm - sEsyn[SYNAPSE_AMPA]) * gsyn;
-//	}
-//
-//	else if (synType == SYNAPSE_GABA) {
-//		ftype r = (currTime - spikeTime) / sTau[2*SYNAPSE_GABA];
-//		gsyn = sGmax[SYNAPSE_GABA] * r * expf(1 - r) * weight;
-//		//current = (vmListLocal[POS(comp)] - sEsyn[SYNAPSE_GABA]) * gsyn;
-//		current = (vm - sEsyn[SYNAPSE_GABA]) * gsyn;
-//	}
-//
-//	return current;
-//}
-//
-//__device__ void findSynapticCurrents(HinesStruct *hList, ftype *active, ftype *vmListLocal,
-//		ftype currTime, ftype *sTau, ftype *sGmax, ftype *sEsyn, ftype* freemem) {
-//
-//	//ftype *freeMem;
-//
-//	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
-//	HinesStruct & h = hList[neuron];
-//	int nNeurons = h.nNeurons;
-//
-//	int synapseListSize = h.synapseListSize;
-//	int spikeListSize   = h.spikeListSize;
-//
-//	ftype *spikeList = h.spikeList;
-//	ftype *synapseWeightList = h.synapseWeightList;
-//
-//	if (spikeListSize > 0) {
-//
-//		int spike = h.synSpikeListPos[0];
-//		for (int syn=0; syn < synapseListSize; syn++) {
-//			int synComp = h.synapseCompList[syn];
-//			int lastSpikePos = ( syn < (synapseListSize-1) ) ?
-//					h.synSpikeListPos[syn+1] : h.synSpikeListPos[0] + spikeListSize;
-//			ucomp synapseType = h.synapseTypeList[syn];
-//
-//			for (; spike < lastSpikePos; spike += 2 ) {
-//
-//				ftype spk1 = spikeList[neuron + spike * nNeurons];
-//				ftype spk2 = (spike+1 < lastSpikePos) ? spikeList[neuron + (spike+1) * nNeurons] : 1e100000;
-//				ftype w1   = synapseWeightList[neuron + spike * nNeurons];
-//				ftype w2   = (spike+1 < lastSpikePos) ? synapseWeightList[neuron + (spike+1) * nNeurons] : 0;
-//
-//				ftype current = 0;
-//				if (currTime >= spk1)
-//					current += getCurrent(vmListLocal[synComp * blockDim.x + threadIdx.x],
-//							synapseType, spk1, w1, currTime, sTau, sGmax, sEsyn);
-//				if (currTime >= spk2)
-//					current += getCurrent(vmListLocal[synComp * blockDim.x + threadIdx.x],
-//							synapseType, spk2, w2, currTime, sTau, sGmax, sEsyn);
-//
-//				active [POS(synComp)] += current;
-//			}
-//
-//
-//			spike = lastSpikePos;
-//		}
-//	}
-//
-//}
-
-/**
- * Find the gate openings in the next time step
- * m(t + dt) = a + b m(t - dt)
- */
-//__device__ void evaluateGatesG( HinesStruct *hList, ftype *vmListLocal,
-//		ftype *nGate, ftype *hGate, ftype *mGate ) {
-//
-//	//int neuron = blockIdx.x * blockDim.x + threadIdx.x;
-//	HinesStruct & h = hList[blockIdx.x * blockDim.x + threadIdx.x];
-//
-//	ftype alpha, beta, a, b;
-//	ftype V;
-//	ftype dtRec = 1/h.dt;
-//
-//	for (int i=0; i<h.compListSize; i++) {
-//		V = vmListLocal[ POS(h.compList[i]) ];
-//
-//		// gate m
-//		alpha = (V != 25.0) ? (0.1 * (25 - V)) / ( expf( 0.1 * (25-V) ) - 1 ) : 1; // ____expff para double
-//		beta  = 4 * expf( -V/18 );
-//		a = alpha / (dtRec + (alpha + beta)/2);
-//		b = (dtRec - (alpha + beta)/2) / (dtRec + (alpha + beta)/2);
-//		mGate[POS(i)] = a + b * mGate[POS(i)];
-//
-//		// gate h
-//		alpha =  0.07 * expf ( -V/20 );
-//		beta  = 1 / ( expf( (30-V)/10 ) + 1 );
-//		a = alpha / (dtRec + (alpha + beta)/2);
-//		b = (dtRec - (alpha + beta)/2) / (dtRec + (alpha + beta)/2);
-//		hGate[POS(i)] = a + b * hGate[POS(i)];
-//
-//	 	// gate n
-//		alpha = (V != 10.0) ? (0.01 * (10 - V)) / ( expf( 0.1 * (10-V) ) - 1 ) : 0.1;
-//		beta  = 0.125 * expf ( -V/80 );
-//		a = alpha / (dtRec + (alpha + beta)/2);
-//		b = (dtRec - (alpha + beta)/2) / (dtRec + (alpha + beta)/2);
-//		nGate[POS(i)] = a + b * nGate[POS(i)];
-//
-//	}
-//}
 
 /**
  * Find the gate openings in the next time step

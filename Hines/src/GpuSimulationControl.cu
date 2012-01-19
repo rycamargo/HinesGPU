@@ -32,7 +32,7 @@ extern __global__ void performCommunicationsG_Step2(int nNeurons, ConnGpu *connG
 		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
 		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, ftype *tmpDevMemory);
 extern __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
-		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev, HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev);
+		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev, HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom);
 
 void checkCUDAError(const char *msg)
 {
@@ -467,7 +467,7 @@ void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & 
 		performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(
 				tInfo->nNeurons[type], sharedData->connGpuListDevice[type],
 				synData->nGeneratedSpikesGpusDev[threadNumber], synData->genSpikeTimeListGpusDev[threadNumber],
-				sharedData->hGpu[type], randomSpikeTimesDev, randomSpikeDestDev);
+				sharedData->hGpu[type], randomSpikeTimesDev, randomSpikeDestDev, randomSpkInfo.nRandom);
 
 		//printf (" type=%d %d %d %d\n", type, tInfo->nNeurons[type], nThreadsComm, sharedMemSizeComm);
 //		performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(

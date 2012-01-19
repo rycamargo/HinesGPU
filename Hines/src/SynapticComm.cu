@@ -158,65 +158,64 @@ ConnGpu* createGpuConnections( ConnectionInfo *connInfo, int destType, int *nNeu
 }
 
 __device__ void updateActivationListPos (
-		ftype *activationList, ucomp* activationListPos, int activationListSize, ucomp cStep,
+		ftype *activationList, ucomp* activationListPos, int activationListSize, int cStep,
 		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight, int destNeuron, int nNeurons, ftype *freeMem) {
 
 	//int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 
+	//cStep = -1;
+
 	ftype fpos = (spikeTime + delay - currTime) / dt;
 
-	ucomp pos  = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
+	int pos  = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
 	pos       += synapse * activationListSize;
 
-	ucomp nextPos  = ( pos + 1 ) % activationListSize;
+	int nextPos  = ( pos + 1 ) % activationListSize;
 	nextPos       += synapse * activationListSize;
 
 	ftype diff = fpos - (int)fpos;
 
-	activationList[    pos * nNeurons + destNeuron] += (weight / dt) * ( 1 - diff );
-	activationList[nextPos * nNeurons + destNeuron] += (weight / dt) * diff;
+	//cStep = -1;
+	if (cStep < 0) { // some race conditions can occur in this version and some spikes may be lost
+		activationList[    pos * nNeurons + destNeuron] += (weight / dt) * ( 1 - diff );
+		activationList[nextPos * nNeurons + destNeuron] += (weight / dt) * diff;
+	}
+	else {
+		pos     =     pos * nNeurons + destNeuron;
+		nextPos = nextPos * nNeurons + destNeuron;
+
+		ftype *posValue      = freeMem;
+		ftype *nextPosValue  = posValue + blockDim.x;
+		ftype *posValueO     = nextPosValue + blockDim.x;
+		ftype *nextPosValueO = posValueO + blockDim.x;
+		int *posToUpdate     = (int *)(nextPosValueO + blockDim.x);
+		int *posToUpdateO    = posToUpdate  + blockDim.x;
+		int *cStepThread     = posToUpdateO + blockDim.x;
 
 
-//	ftype *posValue      = freeMem;
-//	ftype *nextPosValue  = posValue + blockDim.x;
-//	ftype *posValueO     = nextPosValue + blockDim.x;
-//	ftype *nextPosValueO = posValueO + blockDim.x;
-//	ucomp *posToUpdate   = (ucomp *)(nextPosValueO + blockDim.x);
-//	ucomp *posToUpdateO  = posToUpdate  + blockDim.x;
-//	ucomp *cStepThread   = posToUpdateO + blockDim.x;
-//
-//
-//	posToUpdate[threadIdx.x]   = pos;
-//	cStepThread[threadIdx.x]   = cStep;
-//
-//	posValue[threadIdx.x]      = (weight / dt) * ( 1 - diff );
-//	nextPosValue[threadIdx.x]  = (weight / dt) * diff;
-//	posValueO[threadIdx.x]     = (weight / dt) * ( 1 - diff );
-//	nextPosValueO[threadIdx.x] = (weight / dt) * diff;
-//
-//	for (int i=threadIdx.x + 1; i<blockDim.x; i++)
-//		if ( cStep == cStepThread[i] && pos == posToUpdateO[i] ) {
-//			posValue[threadIdx.x]     += posValueO[i];
-//			nextPosValue[threadIdx.x] += nextPosValueO[i];
-//			posToUpdate[i] += 1; // just need to change the value by any amount
-//		}
-//
-//	__syncthreads();
-//
-//	if (pos == posToUpdate[threadIdx.x]) {
-//		activationList[    pos * nNeurons + destNeuron] += posValue[threadIdx.x];
-//		activationList[nextPos * nNeurons + destNeuron] += nextPosValue[threadIdx.x];
-//	}
+		posToUpdate[threadIdx.x]   = pos;
+		posToUpdateO[threadIdx.x]  = pos;
+		cStepThread[threadIdx.x]   = cStep; // Usar o pos completo
 
+		posValue[threadIdx.x]      = (weight / dt) * ( 1 - diff );
+		nextPosValue[threadIdx.x]  = (weight / dt) * diff;
+		posValueO[threadIdx.x]     = (weight / dt) * ( 1 - diff );
+		nextPosValueO[threadIdx.x] = (weight / dt) * diff;
 
+		for (int i=threadIdx.x + 1; i<blockDim.x; i++)
+			if ( cStep == cStepThread[i] && pos == posToUpdateO[i] ) {
+				posValue[threadIdx.x]     += posValueO[i];
+				nextPosValue[threadIdx.x] += nextPosValueO[i];
+				posToUpdate[i] += 1; // just need to change the value by any amount
+			}
 
-//	for (int i=0; i<blockDim.x; i++) {
-//
-//		if (threadIdx.x == i) {
-			//activationList[    pos * nNeurons + destNeuron] += (weight / dt) * ( 1 - diff );
-			//activationList[nextPos * nNeurons + destNeuron] += (weight / dt) * diff;
-//		}
-//	}
+		//__syncthreads();
+
+		if (pos == posToUpdate[threadIdx.x]) {
+			activationList[    pos] += posValue[threadIdx.x];
+			activationList[nextPos] += nextPosValue[threadIdx.x];
+		}
+	}
 
 }
 
@@ -228,9 +227,9 @@ __device__ void updateActivationListPos (
 __device__ void updateActivationList( HinesStruct *hList,
 		int nNeurons, ConnGpu connGpuDev,
 		ftype **genSpikeTimeListDev, ucomp **nGeneratedSpikesDev,
-		ftype *randomSpikeTimesDev,  int *randomSpikeDestDev, ftype *freeMem) {
+		ftype *randomSpikeTimesDev,  int *randomSpikeDestDev, int nRandom, ftype *freeMem) {
 
-	ucomp cStep = 123;
+	int cStep = 0;
 
 	int spikeTimeListSize = GENSPIKETIMELIST_SIZE;
 
@@ -239,12 +238,13 @@ __device__ void updateActivationList( HinesStruct *hList,
 	ftype *activationList  = hList[0].activationList;     // global list
 	int activationListSize = hList[0].activationListSize; // global value
 
-	if (threadIdx.x >= connGpuDev.nNeuronsGroup) return;
-	//HinesStruct & h = hList[neuron];
+	//if (threadIdx.x >= connGpuDev.nNeuronsGroup) return;
 	ftype dt = hList[neuron].dt;
 	ftype currTime = hList[neuron].currStep * dt;
 
 	for (int iConn = 0; iConn < connGpuDev.nConnectionsTotal; iConn += blockDim.x) {
+
+		cStep = (connGpuDev.nConnectionsTotal + iConn) * GENSPIKETIMELIST_SIZE; // The value will never repeat
 
 		if (iConn+threadIdx.x < connGpuDev.nConnectionsTotal) {
 
@@ -258,35 +258,37 @@ __device__ void updateActivationList( HinesStruct *hList,
 			ucomp synapse  = connGpuDev.synapseDevice[iConn+threadIdx.x];
 			ftype delay    = connGpuDev.delayDevice  [iConn+threadIdx.x];
 
-			ftype *genSpikeTimes = genSpikeTimeListDev[srcType] + spikeTimeListSize * srcNeuron; // Put in Shared
+			ftype *genSpikeTimes = genSpikeTimeListDev[srcType] + spikeTimeListSize * srcNeuron;
 
-			for (int i = 0; i < nSpikesSource; i++) {
+			for (int i = 0; i < nSpikesSource; i++, cStep++) {
 
 				updateActivationListPos( activationList, hList[destNeuron].activationListPos, activationListSize, cStep,
 						currTime, dt, synapse, genSpikeTimes[i], delay, weight, destNeuron, nNeurons, freeMem );
 			}
 		}
-
-		cStep++;
 	}
 
+	__syncthreads();
 
 	/**
 	 * Copy the random spikes
-	 * Only works when random spikes are delivered to synapse 0
-	 * TODO: What happens if a position outside the vector is accessed?
+	 * Supposes that random spikes are delivered to synapse 0
 	 */
 	int iRnd = 0;
-	int destNeuron = randomSpikeDestDev[ threadIdx.x ] % CONN_NEURON_TYPE;
+	cStep = 1;
+	int destNeuron = -1;
 	int maxNeuron  = connGpuDev.nNeuronsGroup + connGpuDev.nNeuronsInPreviousGroups;
-	while (destNeuron >= 0 && destNeuron < maxNeuron) {
-		if ( destNeuron >= connGpuDev.nNeuronsInPreviousGroups ) {
+
+	while (iRnd + threadIdx.x < nRandom  && destNeuron < maxNeuron) {
+
+		destNeuron = randomSpikeDestDev[ iRnd+threadIdx.x ] % CONN_NEURON_TYPE;
+
+		if ( destNeuron >= connGpuDev.nNeuronsInPreviousGroups && destNeuron < maxNeuron ) {
 			// synapse=0, delay=0, weight = 1
 			updateActivationListPos( activationList, hList[destNeuron].activationListPos, activationListSize, cStep,
 					currTime, dt, 0, randomSpikeTimesDev[iRnd+threadIdx.x], 0, 1, destNeuron, nNeurons, freeMem );
 		}
 		iRnd += blockDim.x;
-		destNeuron = randomSpikeDestDev[iRnd+threadIdx.x]%CONN_NEURON_TYPE ;
 		cStep++;
 	}
 
@@ -295,7 +297,7 @@ __device__ void updateActivationList( HinesStruct *hList,
 
 __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
-		HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev) {
+		HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom) {
 
 	int group = blockIdx.x;
 	ConnGpu connGpuDev = connGpuListDev[group];
@@ -310,7 +312,7 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 //	int neuron = connGpuDev.nNeuronsInPreviousGroups + threadIdx.x;
 
 	updateActivationList( hList, nNeurons, connGpuDev, genSpikeTimeListDev, nGeneratedSpikesDev,
-			randomSpikeTimesDev, randomSpikeDestDev, freeMem);
+			randomSpikeTimesDev, randomSpikeDestDev, nRandom, freeMem);
 }
 
 

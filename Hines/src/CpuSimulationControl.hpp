@@ -28,8 +28,6 @@ public:
 //private:
 
     void performCpuNeuronalProcessing();
-
-    void performCPUCommunication(int type, int maxSpikesNeuron, int nRandom);
     void addReceivedSpikesToTargetChannelCPU();
 
 

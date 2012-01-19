@@ -152,23 +152,8 @@ public:
 	SynapticChannels(ftype *synapticCurrent, ftype *vmList, int nComp);
 	virtual ~SynapticChannels();
 
-	void printSpikeTimes(ftype time);
-
 	int getAndResetNumberOfAddedSpikes();
-
 	int getNumberOfAddedSpikes() { return nAddedSpikes;}
-
-	void updateSpikeList(ftype time);
-	void updateSpikeListGpu(ftype time, ftype *spikeListGlobal, ftype *weightListGlobal,
-			int maxSpikeNeuron, int nNeurons, int neuron, int type);
-
-
-	void addSpikeList(ucomp synapse, int nGeneratedSpikes, ftype *spikeTimes, ftype delay, ftype weight);
-	void addSpike(ucomp synapse, ftype time, ftype weight);
-
-	void evaluateCurrents(ftype currTime, int type, int neuron);
-
-	void printSpikes(ucomp synapse);
 };
 
 #endif /* SYNAPTICCHANNELS_H_ */

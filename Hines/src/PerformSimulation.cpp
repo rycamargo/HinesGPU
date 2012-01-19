@@ -298,9 +298,6 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 						}
 						randomSpkInfo.nRandom++;
 						if (benchConf.simCommMode == NN_CPU) {
-							// Old implementation (ucomp synapse, ftype time, ftype weight)
-							m.synapticChannels->addSpike(randSynapse, spkTime, randWeight);
-
 
 							if (benchConf.simProcMode == NN_CPU)
 								m.synapticChannels->addToSynapticActivationList(currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
@@ -397,7 +394,7 @@ int PerformSimulation::launchExecution() {
 	 *--------------------------------------------------------------*/
     if (benchConf.simProcMode == NN_GPU)
     	for(int type = startTypeThread;type < endTypeThread;type++){
-    		printf("GPU allocation with %d neurons, %d comparts on device %d thread %d process %d.\n", nNeurons[type], sharedData->matrixList[type][0].nComp, tInfo->deviceNumber, threadNumber, tInfo->currProcess);
+    		//printf("GPU allocation with %d neurons, %d comparts on device %d thread %d process %d.\n", nNeurons[type], sharedData->matrixList[type][0].nComp, tInfo->deviceNumber, threadNumber, tInfo->currProcess);
     		gpuSimulation->prepareExecution(type);
     	}
 
@@ -418,22 +415,6 @@ int PerformSimulation::launchExecution() {
     		cudaMalloc((void**)((((&(sharedData->hGpu[type]))))), sizeof (HinesStruct) * nNeurons[type]);
     		cudaMemcpy(sharedData->hGpu[type], sharedData->hList[type], sizeof (HinesStruct) * nNeurons[type], cudaMemcpyHostToDevice);
     		checkCUDAError("Memory Allocation [hGPU]:");
-    	}
-    }
-
-    /*--------------------------------------------------------------
-	 * Prepare the spike list in the format used in the GPU
-	 *--------------------------------------------------------------*/
-    int maxSpikesNeuron = 5000; //5000;
-    if (benchConf.simProcMode == NN_GPU) {
-    	for(int type = startTypeThread;type < endTypeThread;type++){
-    		int neuronSpikeListSize = maxSpikesNeuron * nNeurons[type];
-    		synData->spikeListGlobal[type] = (ftype*)((((malloc(sizeof (ftype) * neuronSpikeListSize)))));
-    		synData->weightListGlobal[type] = (ftype*)((((malloc(sizeof (ftype) * neuronSpikeListSize)))));
-    		cudaMalloc((void**)((((&(synData->spikeListDevice[type]))))), sizeof (ftype) * neuronSpikeListSize);
-    		cudaMalloc((void**)((((&(synData->weightListDevice[type]))))), sizeof (ftype) * neuronSpikeListSize);
-    		if(type == 0)
-    			printf("Spike List size of %.3f MB for each type.\n", sizeof (ftype) * neuronSpikeListSize / 1024. / 1024.);
     	}
     }
 
@@ -546,10 +527,7 @@ int PerformSimulation::launchExecution() {
 		if (benchConf.simCommMode == NN_CPU) {
 
 			if (benchConf.simProcMode == NN_GPU) {
-				// TODO: should be removed after implementing in the GPU
 				for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
-
-					//printf("Reading data. \n");
 
 					int globalActListSize = sharedData->hList[type][0].synapseListSize * sharedData->hList[type][0].activationListSize * nNeurons[type];
 					cudaMemcpy(synData->activationListGlobal[type], sharedData->hList[type][0].activationList,
@@ -559,14 +537,6 @@ int PerformSimulation::launchExecution() {
 					cudaMemcpy(synData->activationListPosGlobal[type], sharedData->hList[type][0].activationListPos,
 							sizeof(ucomp) * synChannel->synapseListSize * nNeurons[type], cudaMemcpyDeviceToHost);
 
-
-					//for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
-					//						SynapticChannels *synChannel = sharedData->matrixList[type][neuron].synapticChannels;
-					//						cudaMemcpy(synChannel->activationListPos, sharedData->hList[type][neuron].activationListPos,
-					//								sizeof(ucomp) * synChannel->synapseListSize, cudaMemcpyDeviceToHost);
-
-					//						if ( type == 0 && neuron == 0)
-					//								printf("Copied GPU activiontPosData.\n");
 				}
 
 				syncCpuThreads();
@@ -587,13 +557,6 @@ int PerformSimulation::launchExecution() {
 				for (int type = startTypeThread; type < endTypeThread; type++)
 					cudaMemcpy(synData->vmListHost[type], synData->vmListDevice[type], sizeof(ftype) * nNeurons[type], cudaMemcpyDeviceToHost);
 		}
-
-		// used only for debugging
-		//if(threadNumber == 0 && tInfo->kStep == 0) {
-		//	ftype usedSharedMem;
-		//	cudaMemcpy((void *)(&usedSharedMem), sharedData->hList[startTypeThread][0].active, sizeof(ftype), cudaMemcpyDeviceToHost);
-		//	printf("usedSharedMem=%.1f bytes.\n", usedSharedMem);
-		//}
 
 		/*--------------------------------------------------------------
 		 * Writes Vm to file at the end of each kernel execution
@@ -628,39 +591,15 @@ int PerformSimulation::launchExecution() {
 			/*-------------------------------------------------------
 			 * Perform CPU and GPU Communications
 			 *-------------------------------------------------------*/
-			if (benchConf.simCommMode == NN_GPU)
-				gpuSimulation->performGPUCommunications(type, randomSpkInfo);
+			if (benchConf.simProcMode == NN_GPU) {
 
-			else if (benchConf.simCommMode == NN_CPU ) {
+				if (benchConf.simCommMode == NN_GPU)
+					gpuSimulation->performGPUCommunications(type, randomSpkInfo);
 
-				if (benchConf.simProcMode == NN_GPU) {
-
+				else  { // Hybrid mode
 					int globalActListSize = sharedData->hList[type][0].synapseListSize * sharedData->hList[type][0].activationListSize * nNeurons[type];
-					printf("Copying %d elements of activation lists to the GPU!\n", globalActListSize);
-
 					cudaMemcpy(sharedData->hList[type][0].activationList, synData->activationListGlobal[type],
 							sizeof(ftype) * globalActListSize, cudaMemcpyHostToDevice);
-
-					//					for (int neuron=0; neuron<nNeurons[type]; neuron++) {
-
-					//						SynapticChannels *synChannel = sharedData->matrixList[type][neuron].synapticChannels;
-					//						cudaMemcpy(sharedData->hList[type][0].activationList, synData->activationListGlobal[type],
-					//								sizeof(ftype) * synChannel->synapseListSize * synChannel->activationListSize, cudaMemcpyHostToDevice);
-
-					//						cudaMemcpy(sharedData->hList[type][neuron].activationList, synChannel->activationList,
-					//								sizeof(ftype) * synChannel->synapseListSize * synChannel->activationListSize, cudaMemcpyHostToDevice);
-
-					//cudaMemcpy(sharedData->hList[type][neuron].activationListPos, synChannel->activationListPos,
-					//		sizeof(ucomp) * synChannel->synapseListSize, cudaMemcpyHostToDevice);
-				}
-
-
-				cpuSimulation->performCPUCommunication(type, maxSpikesNeuron, randomSpkInfo.nRandom);
-
-				//Copy synaptic and spike info into the GPU
-				if (benchConf.simProcMode == NN_GPU) {
-					int spikeListSizeMax = gpuSimulation->updateSpikeListSizeGlobal(type, maxSpikesNeuron);
-					gpuSimulation->transferSynapticSpikeInfoToGpu(type, spikeListSizeMax);
 				}
 			}
 
@@ -703,13 +642,6 @@ int PerformSimulation::launchExecution() {
 
     // TODO: Free CUDA Memory
     if (benchConf.simProcMode == NN_GPU) {
-    	for (int type = startTypeThread; type < endTypeThread; type++) {
-    		cudaFree(synData->spikeListDevice[type]);
-    		cudaFree(synData->weightListDevice[type]);
-    		free(synData->spikeListGlobal[type]);
-    		free(synData->weightListGlobal[type]);
-    	}
-
     	if (threadNumber == 0) {
     		delete[] kernelInfo->nBlocksComm;
     		delete[] kernelInfo->nThreadsComm;

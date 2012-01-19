@@ -69,9 +69,6 @@ class ActiveChannels {
 	ucomp *getCompList () { return activeCompList; }
 
 
-	void evaluateCurrents( ftype *Rm, ftype *active );
-	void evaluateGates();
-
 	/**
 	 * New implementation
 	 */
@@ -100,8 +97,8 @@ class ActiveChannels {
 
 	ftype getActiveConductances(int activeComp) {return gActive[activeComp];}
 
-	void evaluateCurrentsNew( ftype *Rm, ftype *active );
-	void evaluateGatesNew();
+	void evaluateCurrents( ftype *Rm, ftype *active );
+	void evaluateGates();
 
 	void createChannelList (int nChannels, ucomp *nGates, ucomp *comp, ftype *channelEk, ftype *gBar, ftype *eLeak, int nActiveComp_, ucomp *activeCompList_);
 

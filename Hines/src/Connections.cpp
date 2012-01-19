@@ -306,7 +306,7 @@ int Connections::connectRandom ( ThreadInfo *tInfo ) {
 			tInfo, BASKET_CELL, PYRAMIDAL_CELL, 1,
 			tInfo->sharedData->inhPyrWeight/2, 10);
 
-	printf("Total number of connections = %d.\n", nConnTotal);
+	//printf("Total number of connections = %d.\n", nConnTotal);
 
 	return 0;
 }

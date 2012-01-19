@@ -388,7 +388,7 @@ __device__ void backSubstituteG(HinesStruct *hList,
 
 }
 
-__global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListStartGlobal, ftype *vmListGlobal) {
+__global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype *vmListGlobal) {
 
 
 	//return;
@@ -401,19 +401,6 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 	int nComp = h.nComp;
 	int triangAll = h.triangAll;
 	int nGatesTotal = h.nGatesTotal;
-
-//	if (h.currStep > 0) {
-//		h.synSpikeListPos = spikeListPosGlobal + neuron * h.synapseListSize;
-//		h.spikeList = spikeListGlobal;
-//		h.synapseWeightList = weightListGlobal;
-//		h.spikeListSize = spikeListStartGlobal[neuron];
-//	}
-//	else {
-//		h.synSpikeListPos = 0;
-//		h.spikeList = 0;
-//		h.synapseWeightList = 0;
-//		h.spikeListSize = 0;
-//	}
 
 	/******************************************************************************************
 	 * Alocates the shared memory

@@ -34,8 +34,6 @@ public:
     void createGpuCommunicationStructures();
     void configureGpuKernel();
 
-    int  updateSpikeListSizeGlobal(int type, int maxSpikesNeuron);
-    void transferSynapticSpikeInfoToGpu(int type, int spikeListSizeMax);
     void performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo);
     void performGpuNeuronalProcessing();
 

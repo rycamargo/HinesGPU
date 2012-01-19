@@ -53,73 +53,9 @@ ActiveChannels::~ActiveChannels() {
 	//delete[] activeCompList;
 }
 
-void ActiveChannels::evaluateCurrents(	ftype *Rm, ftype *active ) {
-
-	if (this->channelInfo != 0)
-		return evaluateCurrentsNew(Rm, active); // TODO:
+void ActiveChannels::evaluateCurrents( ftype *Rm, ftype *active ) {
 
 	evaluateGates();
-
-	/**
-	 * Update the channel conductances
-	 */
-	for (int i=0; i<nActiveComp; i++) {
-
-		gNaChannel[i] = gNaBar[i] * m[i] * m[i] * m[i] * h[i];
-		gKChannel[i]  =  gKBar[i] * n[i] * n[i] * n[i] * n[i];
-
-		unsigned int comp = activeCompList[i];
-		active[ comp ] -= gNaChannel[i] * ENa ;
-		active[ comp ] -= gKChannel[i] * EK  ;
-		active[ comp ] -=  ( 1 / Rm[comp] ) * ( ELeak );
-	}
-}
-
-
-
-/**
- * Find the gate openings in the next time step
- * m(t + dt) = a + b m(t - dt)
- */
-void ActiveChannels::evaluateGates(  ) {
-
-	ftype alpha, beta, a, b, V;
-
-	for (int i=0; i<nActiveComp; i++) {
-		V = vmList[ activeCompList[i] ];
-
-		//#define EXPONENTIAL 0   // A exp((v-V0)/B)
-		//#define SIGMOID 1 		// A / (exp((v-V0)/B) + 1)
-		//#define LINOID 2        // A (v-V0) / (exp((v-V0)/B) - 1)
-
-		// gate m
-		alpha = (V != 25.0) ? (0.1 * (25 - V)) / ( expf( 0.1 * (25-V) ) - 1 ) : 1; // LINOID: 0.1; A=-0.1, B=-10, V0=25
-		beta  = 4 * expf ( -V/18 ); // EXPONENTIAL: A = 4, B=-18, V0=0
-		a = alpha / (1/dt + (alpha + beta)/2);
-		b = (1/dt - (alpha + beta)/2) / (1/dt + (alpha + beta)/2);
-	 	m[i] = a + b * m[i];
-
-		// gate h
-		alpha =  0.07 * expf ( -V/20 ); // EXPONENTIAL: A = 0.07, B=-20, V0=0
-		beta  = 1 / ( expf( (30-V)/10 ) + 1 ); // SIGMOID: A = 1, B=-10, V0=30
-		a = alpha / (1/dt + (alpha + beta)/2);
-		b = (1/dt - (alpha + beta)/2) / (1/dt + (alpha + beta)/2);
-	 	h[i] = a + b * h[i];
-
-	 	// gate n
-		alpha = (V != 10.0) ? (0.01 * (10 - V)) / ( expf( 0.1 * (10-V) ) - 1 ) : 0.1; // LINOID: 0.1; A=-0.01, B=-10, V0=10
-		beta  = 0.125 * expf ( -V/80 );	// EXPONENTIAL: A = 0.125, B=-80, V0=0
-		a = alpha / (1/dt + (alpha + beta)/2);
-		b = (1/dt - (alpha + beta)/2) / (1/dt + (alpha + beta)/2);
-	 	n[i] = a + b * n[i];
-	}
-}
-
-
-
-void ActiveChannels::evaluateCurrentsNew( ftype *Rm, ftype *active ) {
-
-	evaluateGatesNew();
 
 	for (int i=0; i<nActiveComp; i++)
 		gActive[i] = 0;
@@ -187,7 +123,7 @@ void ActiveChannels::evaluateCurrentsNew( ftype *Rm, ftype *active ) {
  * Find the gate openings in the next time step
  * m(t + dt) = a + b m(t - dt)
  */
-void ActiveChannels::evaluateGatesNew(  ) {
+void ActiveChannels::evaluateGates(  ) {
 
 	ftype alpha, beta, a, b;
 

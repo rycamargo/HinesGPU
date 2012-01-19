@@ -64,6 +64,12 @@ ConnGpu* createGpuConnections( ConnectionInfo *connInfo, int destType, int *nNeu
 	}
 
 
+	ftype totalConnections = 0;
+	for (int group=0; group<nGroups; group++)
+		totalConnections +=nConnectionsTotal[group];
+	printf ("Allocated %.3f MB for %.6fM connections info for destType %d with %d groups. \n",
+			totalConnections/1000/1000 * ( 2*sizeof(int) + sizeof(ucomp) + 2*sizeof(ftype) ),
+			totalConnections/1000/1000, destType, nGroups);
 
 
 	for (int group=0; group<nGroups; group++) {
@@ -163,8 +169,6 @@ __device__ void updateActivationListPos (
 
 	//int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 
-	//cStep = -1;
-
 	ftype fpos = (spikeTime + delay - currTime) / dt;
 
 	int pos  = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
@@ -238,7 +242,6 @@ __device__ void updateActivationList( HinesStruct *hList,
 	ftype *activationList  = hList[0].activationList;     // global list
 	int activationListSize = hList[0].activationListSize; // global value
 
-	//if (threadIdx.x >= connGpuDev.nNeuronsGroup) return;
 	ftype dt = hList[neuron].dt;
 	ftype currTime = hList[neuron].currStep * dt;
 
@@ -305,7 +308,7 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 
 	extern __shared__ ftype sharedMem[];
 	ftype *freeMem =sharedMem;
-//	int nSynapses = 2;
+
 //	int *nReceivedSpikesShared = (int *)sharedMem;
 //	int *nSpikesToKeepShared = nReceivedSpikesShared + connGpuDev.nNeuronsGroup * nSynapses;
 //	int *sharedMemNext = nSpikesToKeepShared + connGpuDev.nNeuronsGroup * nSynapses;
@@ -314,31 +317,4 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 	updateActivationList( hList, nNeurons, connGpuDev, genSpikeTimeListDev, nGeneratedSpikesDev,
 			randomSpikeTimesDev, randomSpikeDestDev, nRandom, freeMem);
 }
-
-
-
-
-
-
-__global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
-		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
-		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int *nReceivedSpikesGlobal0, int *nReceivedSpikesGlobal1) {
-
-}
-
-__global__ void performCommunicationsG_Step1(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
-		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
-		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, ftype *tmpDevMemory) {
-
-}
-
-__global__ void performCommunicationsG_Step2(int nNeurons, ConnGpu *connGpuListDev, ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
-		HinesStruct *hList, ftype *spikeListGlobal, ftype *weightListGlobal, int *spikeListPosGlobal, int *spikeListSizeGlobal,
-		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, ftype *tmpDevMemory) {
-
-}
-
-
-
-
 

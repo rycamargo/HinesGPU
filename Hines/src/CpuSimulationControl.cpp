@@ -71,7 +71,7 @@ void CpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 
 	ftype currTime = sharedData->dt * (tInfo->kStep + kernelInfo->nKernelSteps);
 
-	if( benchConf.simProcMode == NN_CPU && tInfo->nProcesses == 1) {
+	if( benchConf.checkProcMode(NN_CPU) && tInfo->nProcesses == 1) {
 
 		for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
 

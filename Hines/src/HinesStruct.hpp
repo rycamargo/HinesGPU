@@ -226,7 +226,7 @@ typedef struct {
 	ftype **activationListDevice;
 	ucomp **activationListPosDevice;
 
-
+	ftype **activationListTest;
 
 	int totalTypes;
 } SynapticData;

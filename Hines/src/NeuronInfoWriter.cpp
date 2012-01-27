@@ -86,7 +86,7 @@ void NeuronInfoWriter::writeSampleVm(int kStep)
     if(benchConf.verbose == 1)
         printf("Writing Sample Vms thread=%d\n", tInfo->threadNumber);
 
-    if (benchConf.simProcMode == NN_GPU) {
+    if (benchConf.checkProcMode(NN_GPU) ) {
     	for(int k = 0; k < nVmTimeSeries; k++)
     		if(tInfo->startTypeThread <= groupList[k] && groupList[k] < tInfo->endTypeThread)
     			cudaMemcpy(vmTimeSerie[k], sharedData->hList[ groupList[k] ][ neuronList[k] ].vmTimeSerie,

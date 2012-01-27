@@ -10,8 +10,9 @@
 
 #include "Definitions.hpp"
 
-#define NN_GPU 0
-#define NN_CPU 1
+#define NN_GPU 1
+#define NN_CPU 2
+#define NN_TEST 3
 
 //#define CHK_COMM 2
 //#define CPU_PROC 3
@@ -26,11 +27,19 @@
 // connWrite = Comm Kernel Write time
 #define GPU_COMM_DETAILED 2
 
+#include <cstdio>
+
 extern "C" {
 uint64 gettimeInMilli();
 }
 
-struct BenchConfig {
+class BenchConfig {
+
+private:
+	ucomp simCommMode;
+	ucomp simProcMode;
+
+public:
 	ucomp printAllVmKernelFinish;
 	ucomp printAllSpikeTimes;
 	ucomp printSampleVms;
@@ -40,10 +49,63 @@ struct BenchConfig {
 
 	ucomp gpuCommBenchMode;
 
-	ucomp simCommMode;
-	ucomp simProcMode;
-
 	ucomp checkGpuComm;
+
+
+	int checkProcMode (int type) {
+
+		if (type == simProcMode)
+			return simProcMode;
+		else
+			return 0;
+
+	}
+
+	int checkCommMode (int type) {
+
+		if (type == simCommMode || simCommMode == NN_TEST)
+			return simCommMode;
+		else
+			return 0;
+
+	}
+
+	int setMode (int typeProc, int typeComm) {
+
+		if (typeProc == NN_CPU) {
+
+			if (typeComm == NN_CPU) {
+				simProcMode = typeProc;
+				simCommMode = typeComm;
+			}
+			else {
+				printf("Invalid simulation mode!!!\n");
+				exit(-1);
+			}
+
+		}
+
+		else if (typeProc == NN_GPU) {
+
+			if (typeComm == NN_CPU || typeComm == NN_GPU || typeComm == NN_TEST) {
+				simProcMode = typeProc;
+				simCommMode = typeComm;
+			}
+			else {
+				printf("Invalid simulation mode!!!\n");
+				exit(-1);
+			}
+
+
+		}
+		else {
+			printf("Invalid simulation mode!!!\n");
+			exit(-1);
+		}
+
+		return 0;
+	}
+
 };
 
 struct BenchTimes {

@@ -169,6 +169,8 @@ __device__ void updateActivationListPos (
 
 	//int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 
+	//dt = 0.1;
+
 	ftype fpos = (spikeTime + delay - currTime) / dt;
 
 	int pos  = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
@@ -183,6 +185,7 @@ __device__ void updateActivationListPos (
 	if (cStep < 0) { // some race conditions can occur in this version and some spikes may be lost
 		activationList[    pos * nNeurons + destNeuron] += (weight / dt) * ( 1 - diff );
 		activationList[nextPos * nNeurons + destNeuron] += (weight / dt) * diff;
+
 	}
 	else {
 		pos     =     pos * nNeurons + destNeuron;
@@ -237,13 +240,13 @@ __device__ void updateActivationList( HinesStruct *hList,
 
 	int spikeTimeListSize = GENSPIKETIMELIST_SIZE;
 
-	int neuron = connGpuDev.nNeuronsInPreviousGroups + threadIdx.x;
+	//int neuron = connGpuDev.nNeuronsInPreviousGroups + threadIdx.x;
 
 	ftype *activationList  = hList[0].activationList;     // global list
 	int activationListSize = hList[0].activationListSize; // global value
 
-	ftype dt = hList[neuron].dt;
-	ftype currTime = hList[neuron].currStep * dt;
+	ftype dt = hList[0].dt;
+	ftype currTime = hList[0].currStep * dt;
 
 	for (int iConn = 0; iConn < connGpuDev.nConnectionsTotal; iConn += blockDim.x) {
 

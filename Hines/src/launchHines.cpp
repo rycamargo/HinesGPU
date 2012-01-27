@@ -223,18 +223,11 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 			benchConf.printAllVmKernelFinish = 0;
 			benchConf.printAllSpikeTimes = 0;
 			benchConf.checkGpuComm = 0;
-			if (mode=='G') {
-				benchConf.simProcMode = NN_GPU;
-				benchConf.simCommMode = NN_GPU;
-			}
-			else if (mode=='H') {
-				benchConf.simProcMode = NN_GPU;
-				benchConf.simCommMode = NN_CPU;
-			}
-			else if (mode=='C') {
-				benchConf.simProcMode = NN_CPU;
-				benchConf.simCommMode = NN_CPU;
-			}
+
+			if (mode=='G')      benchConf.setMode(NN_GPU, NN_GPU);
+			else if (mode=='H') benchConf.setMode(NN_GPU, NN_CPU);
+			else if (mode=='C') benchConf.setMode(NN_CPU, NN_CPU);
+			else if (mode=='T') benchConf.setMode(NN_GPU, NN_TEST);
 
 			if (simType[0] == 'n') benchConf.gpuCommBenchMode = GPU_COMM_SIMPLE;
 			else if (simType[0] == 'd') benchConf.gpuCommBenchMode = GPU_COMM_DETAILED;
@@ -252,8 +245,8 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 				tInfo->sharedData->inputSpikeRate = 0.02; // increases the input
 			}
 			else if (simType[1] == '1') {
-				tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
+				tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
 
 				if (simType[2] == 'l') { // 200k: 0.92
 					tInfo->sharedData->excWeight    = 0.030;
@@ -350,7 +343,7 @@ int main(int argc, char **argv) {
 	}
 
 	char mode = argv[1][0];
-	assert (mode == 'C' || mode == 'G' || mode == 'H' || mode == 'B');
+	assert (mode == 'C' || mode == 'G' || mode == 'H' || mode == 'B' || mode == 'T');
 	int nNeurons = atoi(argv[2]);
 	assert ( 0 < nNeurons && nNeurons < 4096*4096);
 	int nComp = atoi(argv[3]);
@@ -401,7 +394,7 @@ int main(int argc, char **argv) {
 			if (mode == 'C' || mode == 'B')
 				pthread_create ( &thread1[t], NULL, launchHostExecution, &(tInfoArray[t]));
 
-			if (mode == 'G' || mode == 'H' || mode == 'B')
+			if (mode == 'G' || mode == 'H' || mode == 'B' || mode == 'T')
 				pthread_create ( &thread1[t], NULL, launchDeviceExecution, &(tInfoArray[t]));
 
 			//pthread_detach(thread1[t]);

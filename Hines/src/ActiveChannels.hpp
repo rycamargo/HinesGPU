@@ -44,20 +44,7 @@ class ActiveChannels {
 	int nActiveComp;
 	ucomp *activeCompList;
 
-	ftype *memory;
-	ftype *n;
-	ftype *h;
-	ftype *m;
-	ftype *gNaBar;
-	ftype *gKBar;
 	ftype *vmList;
-
-	ftype *gNaChannel;
-	ftype *gKChannel;
-
-	ftype ELeak;
-	ftype EK;
-	ftype ENa;
 
 	ActiveChannels(ftype dt, ftype *vmListNeuron_, int nComp);
 	virtual ~ActiveChannels();

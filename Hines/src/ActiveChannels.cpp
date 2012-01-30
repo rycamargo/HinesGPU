@@ -29,27 +29,9 @@ void ActiveChannels::setActiveChannels(int nActiveComp_, ucomp *activeCompList_)
 	this->nActiveComp    = nActiveComp_;
 	this->activeCompList = activeCompList_;
 
-	memory = new ftype[nActiveComp * 7];
-	n = memory;
-	h = n + nActiveComp;
-	m = h + nActiveComp;
-	gNaBar = m + nActiveComp;
-	gKBar  = gNaBar + nActiveComp;
-	gNaChannel  = gKBar + nActiveComp;
-	gKChannel  = gNaChannel + nActiveComp;
-
-	/**
-	 * TODO: Check if is when curr = 0;
-	 */
-	for (int i=0; i<nActiveComp; i++) {
-		n[i] = 0.3177;
-		h[i] = 0.5960;
-		m[i] = 0.0529;
-	}
 }
 
 ActiveChannels::~ActiveChannels() {
-	delete[] memory;
 	//delete[] activeCompList;
 }
 

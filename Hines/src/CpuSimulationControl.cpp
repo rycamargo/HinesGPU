@@ -41,7 +41,6 @@ void CpuSimulationControl::performCpuNeuronalProcessing() {
 	}
 
 
-
 #ifdef MPI_GPU_NN
 	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
 		for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++)
@@ -63,6 +62,7 @@ void CpuSimulationControl::performCpuNeuronalProcessing() {
 			}
 
 		}
+
 
 }
 
@@ -88,11 +88,6 @@ void CpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 						// New implementation
 						for (int spk=0; spk < nGeneratedSpikes; spk++) {
 							targetSynapse->addToSynapticActivationList(currTime, sharedData->dt, connStruct.synapse, spikeTimes[spk], connStruct.delay, connStruct.weigth);
-//							if ( connStruct.dest/CONN_NEURON_TYPE == 0 && connStruct.dest%CONN_NEURON_TYPE == 0) {
-//								if (connStruct.synapse == 0)
-//									printf("Added spike at time %.2f.\n", spikeTimes[spk] + connStruct.delay);
-//							}
-
 						}
 					}
 				}
@@ -128,17 +123,29 @@ void CpuSimulationControl::addReceivedSpikesToTargetChannelCPU()
 
 				SynapticChannels *targetSynapse = sharedData->matrixList[ dType ][ dNeuron ].synapticChannels;
 
+
 				for (int spk=0; spk < nGeneratedSpikes; spk++) {
 
-					GpuSimulationControl::addToInterleavedSynapticActivationList(
-				    		sharedData->synData->activationListGlobal[dType],
-				    		sharedData->synData->activationListPosGlobal[dType] + dNeuron * targetSynapse->synapseListSize,
-				    		targetSynapse->activationListSize,
-				    		dNeuron, tInfo->nNeurons[dType], currTime, sharedData->dt,
-				    		connInfo->synapse[conn], spikeTimes[spk], connInfo->delay[conn], connInfo->weigth[conn]);
+					if ( benchConf.checkProcMode(NN_CPU) ) {
+						for (int spk=0; spk < nGeneratedSpikes; spk++)
+							targetSynapse->addToSynapticActivationList(currTime, sharedData->dt,
+									connInfo->synapse[conn], spikeTimes[spk], connInfo->delay[conn], connInfo->weigth[conn]);
+					}
+
+					else if ( benchConf.checkProcMode(NN_GPU) ) {
+
+						GpuSimulationControl::addToInterleavedSynapticActivationList(
+								sharedData->synData->activationListGlobal[dType],
+								sharedData->synData->activationListPosGlobal[dType] + dNeuron * targetSynapse->synapseListSize,
+								targetSynapse->activationListSize,
+								dNeuron, tInfo->nNeurons[dType], currTime, sharedData->dt,
+								connInfo->synapse[conn], spikeTimes[spk], connInfo->delay[conn], connInfo->weigth[conn]);
+					}
+
 				}
 			}
 		}
+
 	}
 
 	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {

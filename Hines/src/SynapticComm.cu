@@ -164,16 +164,13 @@ ConnGpu* createGpuConnections( ConnectionInfo *connInfo, int destType, int *nNeu
 }
 
 __device__ void updateActivationListPos (
-		ftype *activationList, ucomp* activationListPos, int activationListSize, int cStep,
+		ftype *activationList, ucomp activationListPosSyn, int activationListSize, int cStep,
 		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight, int destNeuron, int nNeurons, ftype *freeMem) {
 
-	//int neuron = blockIdx.x * blockDim.x + threadIdx.x;
-
-	//dt = 0.1;
 
 	ftype fpos = (spikeTime + delay - currTime) / dt;
 
-	int pos  = ( activationListPos[synapse] + (ucomp)fpos + 1 ) % activationListSize;
+	int pos  = ( activationListPosSyn + (ucomp)fpos + 1 ) % activationListSize;
 	pos       += synapse * activationListSize;
 
 	int nextPos  = ( pos + 1 ) % activationListSize;
@@ -181,8 +178,8 @@ __device__ void updateActivationListPos (
 
 	ftype diff = fpos - (int)fpos;
 
-	//cStep = -1;
-	if (cStep < 0) { // some race conditions can occur in this version and some spikes may be lost
+	//cStep = -1; // some race conditions can occur in this version and some spikes may be lost
+	if (cStep < 0) {
 		activationList[    pos * nNeurons + destNeuron] += (weight / dt) * ( 1 - diff );
 		activationList[nextPos * nNeurons + destNeuron] += (weight / dt) * diff;
 
@@ -191,9 +188,10 @@ __device__ void updateActivationListPos (
 		pos     =     pos * nNeurons + destNeuron;
 		nextPos = nextPos * nNeurons + destNeuron;
 
-		ftype *posValue      = freeMem;
-		ftype *nextPosValue  = posValue + blockDim.x;
-		ftype *posValueO     = nextPosValue + blockDim.x;
+		ftype posValue     = (weight / dt) * ( 1 - diff );
+		ftype nextPosValue = (weight / dt) * diff;
+
+		ftype *posValueO     = freeMem;
 		ftype *nextPosValueO = posValueO + blockDim.x;
 		int *posToUpdate     = (int *)(nextPosValueO + blockDim.x);
 		int *posToUpdateO    = posToUpdate  + blockDim.x;
@@ -202,25 +200,22 @@ __device__ void updateActivationListPos (
 
 		posToUpdate[threadIdx.x]   = pos;
 		posToUpdateO[threadIdx.x]  = pos;
-		cStepThread[threadIdx.x]   = cStep; // Usar o pos completo
-
-		posValue[threadIdx.x]      = (weight / dt) * ( 1 - diff );
-		nextPosValue[threadIdx.x]  = (weight / dt) * diff;
-		posValueO[threadIdx.x]     = (weight / dt) * ( 1 - diff );
-		nextPosValueO[threadIdx.x] = (weight / dt) * diff;
+		cStepThread[threadIdx.x]   = cStep; // to solve the problem with threads that do not enter the function
+		posValueO[threadIdx.x]     = posValue;
+		nextPosValueO[threadIdx.x] = nextPosValue;
 
 		for (int i=threadIdx.x + 1; i<blockDim.x; i++)
 			if ( cStep == cStepThread[i] && pos == posToUpdateO[i] ) {
-				posValue[threadIdx.x]     += posValueO[i];
-				nextPosValue[threadIdx.x] += nextPosValueO[i];
+				posValue     += posValueO[i];
+				nextPosValue += nextPosValueO[i];
 				posToUpdate[i] += 1; // just need to change the value by any amount
 			}
 
 		//__syncthreads();
 
 		if (pos == posToUpdate[threadIdx.x]) {
-			activationList[    pos] += posValue[threadIdx.x];
-			activationList[nextPos] += nextPosValue[threadIdx.x];
+			activationList[    pos] += posValue;
+			activationList[nextPos] += nextPosValue;
 		}
 	}
 
@@ -232,15 +227,26 @@ __device__ void updateActivationListPos (
  * TODO: change ConnGpu connGpuDev to reference
  */
 __device__ void updateActivationList( HinesStruct *hList,
-		int nNeurons, ConnGpu connGpuDev,
+		int nNeurons, ConnGpu *connGpuListDev,
 		ftype **genSpikeTimeListDev, ucomp **nGeneratedSpikesDev,
 		ftype *randomSpikeTimesDev,  int *randomSpikeDestDev, int nRandom, ftype *freeMem) {
+
+	ConnGpu connGpuDev = connGpuListDev[blockIdx.x];
 
 	int cStep = 0;
 
 	int spikeTimeListSize = GENSPIKETIMELIST_SIZE;
 
-	//int neuron = connGpuDev.nNeuronsInPreviousGroups + threadIdx.x;
+	int nNeuronsPrev  = connGpuDev.nNeuronsInPreviousGroups;
+	int nSynapses = hList[0].synapseListSize; //nNeuronsPrev + threadIdx.x
+
+	ucomp *activationListPos  = (ucomp *)freeMem; //hList[neuron].activationListPos;
+	freeMem = (ftype *)(activationListPos + connGpuDev.nNeuronsGroup * nSynapses);
+	if (threadIdx.x < connGpuDev.nNeuronsGroup)
+		for (int i=0; i<nSynapses; i++)
+			activationListPos[nSynapses*threadIdx.x + i] = hList[nNeuronsPrev + threadIdx.x].activationListPos[i];
+
+	__syncthreads();
 
 	ftype *activationList  = hList[0].activationList;     // global list
 	int activationListSize = hList[0].activationListSize; // global value
@@ -266,10 +272,12 @@ __device__ void updateActivationList( HinesStruct *hList,
 
 			ftype *genSpikeTimes = genSpikeTimeListDev[srcType] + spikeTimeListSize * srcNeuron;
 
+			ucomp activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + synapse ];
+
 			for (int i = 0; i < nSpikesSource; i++, cStep++) {
 
-				updateActivationListPos( activationList, hList[destNeuron].activationListPos, activationListSize, cStep,
-						currTime, dt, synapse, genSpikeTimes[i], delay, weight, destNeuron, nNeurons, freeMem );
+				updateActivationListPos( activationList, activationListPosSyn, activationListSize,
+						cStep, currTime, dt, synapse, genSpikeTimes[i], delay, weight, destNeuron, nNeurons, freeMem );
 			}
 		}
 	}
@@ -288,10 +296,11 @@ __device__ void updateActivationList( HinesStruct *hList,
 	while (iRnd + threadIdx.x < nRandom  && destNeuron < maxNeuron) {
 
 		destNeuron = randomSpikeDestDev[ iRnd+threadIdx.x ] % CONN_NEURON_TYPE;
+		ucomp activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + 0 ];
 
 		if ( destNeuron >= connGpuDev.nNeuronsInPreviousGroups && destNeuron < maxNeuron ) {
 			// synapse=0, delay=0, weight = 1
-			updateActivationListPos( activationList, hList[destNeuron].activationListPos, activationListSize, cStep,
+			updateActivationListPos( activationList, activationListPosSyn, activationListSize, cStep,
 					currTime, dt, 0, randomSpikeTimesDev[iRnd+threadIdx.x], 0, 1, destNeuron, nNeurons, freeMem );
 		}
 		iRnd += blockDim.x;
@@ -305,10 +314,6 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
 		HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom) {
 
-	int group = blockIdx.x;
-	ConnGpu connGpuDev = connGpuListDev[group];
-
-
 	extern __shared__ ftype sharedMem[];
 	ftype *freeMem =sharedMem;
 
@@ -317,7 +322,7 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 //	int *sharedMemNext = nSpikesToKeepShared + connGpuDev.nNeuronsGroup * nSynapses;
 //	int neuron = connGpuDev.nNeuronsInPreviousGroups + threadIdx.x;
 
-	updateActivationList( hList, nNeurons, connGpuDev, genSpikeTimeListDev, nGeneratedSpikesDev,
+	updateActivationList( hList, nNeurons, connGpuListDev, genSpikeTimeListDev, nGeneratedSpikesDev,
 			randomSpikeTimesDev, randomSpikeDestDev, nRandom, freeMem);
 }
 

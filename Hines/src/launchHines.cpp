@@ -65,7 +65,7 @@ using namespace std;
 //int launchGpuExecution(HinesMatrix *matrixList, int nNeurons){}
 
 
-extern int performHostExecution(ThreadInfo *tInfo);
+//extern int performHostExecution(ThreadInfo *tInfo);
 
 
 void *launchHostExecution(void *ptr) {

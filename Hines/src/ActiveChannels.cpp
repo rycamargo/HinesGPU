@@ -73,7 +73,7 @@ void ActiveChannels::evaluateCurrents( ftype *Rm, ftype *active ) {
 				gChannel *= gateState[pos];
 				break;
 			default:
-				gChannel *= powf(gateState[pos], gateInfo[pos * N_GATE_FIELDS + GATE_POWER] );
+				gChannel *= pow(gateState[pos], gateInfo[pos * N_GATE_FIELDS + GATE_POWER] );
 				break;
 			}
 
@@ -127,13 +127,13 @@ void ActiveChannels::evaluateGates(  ) {
 			ftype v0 = gate[A_V0];
 			switch( gateInfo[pos * N_GATE_FIELDS + ALPHA_FUNCTION] ) {
 			case EXPONENTIAL:
-				alpha = gate[A_A] * expf((V-v0)/gate[A_B]);
+				alpha = gate[A_A] * exp((V-v0)/gate[A_B]);
 				break;
 			case SIGMOID:
-				alpha = gate[A_A] / ( expf( (V-v0)/gate[A_B] ) + 1);
+				alpha = gate[A_A] / ( exp( (V-v0)/gate[A_B] ) + 1);
 				break;
 			case LINOID:
-				alpha = (V != v0) ? gate[A_A] * (V-v0) / (expf((V-v0)/gate[A_B]) - 1) : gate[A_A] * gate[A_B];
+				alpha = (V != v0) ? gate[A_A] * (V-v0) / (exp((V-v0)/gate[A_B]) - 1) : gate[A_A] * gate[A_B];
 				break;
 			default:
 				printf("Active channels parameters are invalid. Exiting...\n");
@@ -145,13 +145,13 @@ void ActiveChannels::evaluateGates(  ) {
 			v0 = gate[B_V0];
 			switch( gateInfo[pos * N_GATE_FIELDS + BETA_FUNCTION] ) {
 			case EXPONENTIAL:
-				beta = gate[B_A] * expf((V-v0)/gate[B_B]);
+				beta = gate[B_A] * exp((V-v0)/gate[B_B]);
 				break;
 			case SIGMOID:
-				beta = gate[B_A] / ( expf( (V-v0)/gate[B_B] ) + 1);
+				beta = gate[B_A] / ( exp( (V-v0)/gate[B_B] ) + 1);
 				break;
 			case LINOID:
-				beta = (V != v0) ? gate[B_A] * (V-v0) / (expf((V-v0)/gate[B_B]) - 1) : gate[B_A] * gate[B_B];
+				beta = (V != v0) ? gate[B_A] * (V-v0) / (exp((V-v0)/gate[B_B]) - 1) : gate[B_A] * gate[B_B];
 				break;
 			default:
 				printf("Active channels parameters are invalid. Exiting...\n");

@@ -164,9 +164,10 @@ ConnGpu* createGpuConnections( ConnectionInfo *connInfo, int destType, int *nNeu
 }
 
 __device__ void updateActivationListPos (
-		ftype *activationList, ucomp activationListPosSyn, int activationListSize, int cStep,
+		ftype *activationList, int activationListPosSyn, int activationListSize, int cStep,
 		ftype currTime, ftype dt, ucomp synapse, ftype spikeTime, ftype delay, ftype weight, int destNeuron, int nNeurons, ftype *freeMem) {
 
+	//activationListPosSyn = 0;
 
 	ftype fpos = (spikeTime + delay - currTime) / dt;
 
@@ -178,11 +179,10 @@ __device__ void updateActivationListPos (
 
 	ftype diff = fpos - (int)fpos;
 
-	//cStep = -1; // some race conditions can occur in this version and some spikes may be lost
+	cStep = -1; // TODO: some race conditions can occur in this version and some spikes may be lost
 	if (cStep < 0) {
 		activationList[    pos * nNeurons + destNeuron] += (weight / dt) * ( 1 - diff );
 		activationList[nextPos * nNeurons + destNeuron] += (weight / dt) * diff;
-
 	}
 	else {
 		pos     =     pos * nNeurons + destNeuron;
@@ -272,7 +272,7 @@ __device__ void updateActivationList( HinesStruct *hList,
 
 			ftype *genSpikeTimes = genSpikeTimeListDev[srcType] + spikeTimeListSize * srcNeuron;
 
-			ucomp activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + synapse ];
+			int activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + synapse ];
 
 			for (int i = 0; i < nSpikesSource; i++, cStep++) {
 
@@ -290,18 +290,21 @@ __device__ void updateActivationList( HinesStruct *hList,
 	 */
 	int iRnd = 0;
 	cStep = 1;
-	int destNeuron = -1;
+	int destNeuron = -1; // TODO: Need volatile keyword?
 	int maxNeuron  = connGpuDev.nNeuronsGroup + connGpuDev.nNeuronsInPreviousGroups;
 
 	while (iRnd + threadIdx.x < nRandom  && destNeuron < maxNeuron) {
 
 		destNeuron = randomSpikeDestDev[ iRnd+threadIdx.x ] % CONN_NEURON_TYPE;
-		ucomp activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + 0 ];
+		//destNeuron = nNeuronsPrev; // TODO: Error is here
+		//destNeuron = -1;
 
-		if ( destNeuron >= connGpuDev.nNeuronsInPreviousGroups && destNeuron < maxNeuron ) {
+		if ( destNeuron >= nNeuronsPrev && destNeuron < maxNeuron ) {
+			int activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + 0 ];
 			// synapse=0, delay=0, weight = 1
 			updateActivationListPos( activationList, activationListPosSyn, activationListSize, cStep,
 					currTime, dt, 0, randomSpikeTimesDev[iRnd+threadIdx.x], 0, 1, destNeuron, nNeurons, freeMem );
+
 		}
 		iRnd += blockDim.x;
 		cStep++;

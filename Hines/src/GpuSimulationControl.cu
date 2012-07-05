@@ -365,7 +365,7 @@ void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & 
 	cudaMalloc((void**)(&randomSpikeTimesDev), sizeof (ftype) * randomSpkInfo.listSize);
 	cudaMalloc((void**)(&randomSpikeDestDev), sizeof (int) * randomSpkInfo.listSize);
 	cudaMemcpy(randomSpikeTimesDev, randomSpkInfo.spikeTimes, sizeof (ftype) * randomSpkInfo.listSize, cudaMemcpyHostToDevice);
-	cudaMemcpy(randomSpikeDestDev, randomSpkInfo.spikeDest, sizeof (int) * randomSpkInfo.listSize, cudaMemcpyHostToDevice);
+	cudaMemcpy(randomSpikeDestDev,  randomSpkInfo.spikeDest,  sizeof (int)   * randomSpkInfo.listSize, cudaMemcpyHostToDevice);
 
 
 
@@ -382,6 +382,7 @@ void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & 
 //	cudaMalloc ( (void **) &nReceivedSpikesDev1, sizeof(int) * nBlocksComm[type]);
 //	nReceivedSpikesHost0 = (int *)malloc(sizeof(int) * nBlocksComm[type]);
 //	nReceivedSpikesHost1 = (int *)malloc(sizeof(int) * nBlocksComm[type]);
+
 
 	performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(
 			tInfo->nNeurons[type], sharedData->connGpuListDevice[type],
@@ -406,8 +407,8 @@ void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & 
 //	free(nReceivedSpikesHost0);
 //	free(nReceivedSpikesHost1);
 
-
 	cudaThreadSynchronize();
+	checkCUDAError("After performCommunicationsG Kernel2:");
 
 	if (threadNumber == 0 && benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE) {
 		cudaThreadSynchronize();
@@ -418,6 +419,7 @@ void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & 
 
 	//int **countReceivedSpikesCpu(synData->v, nNeurons[type], nBlocksComm[type], synData->nGeneratedSpikesHost);
 	//cudaThreadSynchronize();
+
 	cudaFree(randomSpikeTimesDev);
 	cudaFree(randomSpikeDestDev);
 	//cudaThreadSynchronize();
@@ -431,11 +433,12 @@ void GpuSimulationControl::performGpuNeuronalProcessing() {
 		if (tInfo->nNeurons[type] % kernelInfo->nBlocksProc[type]) nThreadsProc++;
 
 		//printf("launching kernel for type %d...\n", type);
-		checkCUDAError("Before SolveMatrixG Kernel:");
 		SynapticData *synData = sharedData->synData;
 
 		solveMatrixG<<<kernelInfo->nBlocksProc[type], nThreadsProc, kernelInfo->sharedMemSizeProc>>>(
 				sharedData->hGpu[type], kernelInfo->nKernelSteps, tInfo->nNeurons[type], synData->vmListDevice[type]);
+
+		checkCUDAError("After SolveMatrixG Kernel:");
 	}
 
 }
@@ -548,7 +551,7 @@ void GpuSimulationControl::configureGpuKernel()
 	 *--------------------------------------------------------------*/
     int nDevices = 0;
     cudaGetDeviceCount(&nDevices);
-    cudaSetDevice((tInfo->threadNumber + (2 * tInfo->currProcess) + 2) % nDevices);
+    cudaSetDevice((tInfo->threadNumber + (2 * tInfo->currProcess) + 1) % nDevices);
     cudaGetDevice(&(tInfo->deviceNumber));
     tInfo->prop = new struct cudaDeviceProp;
     cudaGetDeviceProperties(tInfo->prop, tInfo->deviceNumber);
@@ -567,6 +570,12 @@ void GpuSimulationControl::configureGpuKernel()
         kernelInfo->maxThreadsComm = 32; // or can be 64
         kernelInfo->sharedMemSizeProc = 47 * 1024; // Valid for capability 2.x (48kB)
         kernelInfo->sharedMemSizeComm = 15 * 1024; // Valid for capability 2.x (48kB)
+    }
+    else if(tInfo->prop->major == 3){
+      kernelInfo->maxThreadsProc = 256;
+      kernelInfo->maxThreadsComm = 32; // or can be 64
+      kernelInfo->sharedMemSizeProc = 47 * 1024; // Valid for capability 2.x (48kB)
+      kernelInfo->sharedMemSizeComm = 15 * 1024; // Valid for capability 2.x (48kB)
     }
     //--------------------------------------------------------------
     for(int type = tInfo->startTypeThread;type < tInfo->endTypeThread;type++){

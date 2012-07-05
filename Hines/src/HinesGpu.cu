@@ -140,15 +140,18 @@ __device__ void evaluateGatesGNew( HinesStruct *hList, ftype *vmListLocal, int n
 
 
 __device__ void evaluateCurrentsGNew( HinesStruct *hList, ftype *activeList, ftype *vmListLocal,  int nChannels,
-		ucomp *channelInfo, ftype *channelEk, ftype *channelGbar, ftype *gatePar, ucomp *gateInfo, ftype *gateState,
+		ucomp *channelInfo, ucomp *gateInfo, ftype *gateState,
 		int nComp, int compListSize, ucomp *compList, ftype *eLeak) {
 
 	//ftype *Rm, ftype *active
 
-	evaluateGatesGNew(hList, vmListLocal, nChannels, channelInfo, gatePar, gateInfo, gateState);
-
 	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 	HinesStruct & h = hList[neuron];
+
+	evaluateGatesGNew(hList, vmListLocal, nChannels, channelInfo, h.gatePar, gateInfo, gateState);
+
+	ftype *channelEk = h.channelEk;
+	ftype *channelGbar = h.channelGbar;
 
 	for (int i=0; i<compListSize; i++)
 		h.gActive[i] = 0;
@@ -212,8 +215,7 @@ __device__ void upperTriangularizeAll(HinesStruct *hList, ftype *sTriangList,
 				ftype *sLeftList, ucomp *sLeftListLine, ucomp *sLeftListColumn,
 				ucomp *sLeftStartPos, ftype *rhsLocal, ftype *vmListLocal,
 
-				int nChannels, ucomp *channelInfo, ftype *channelEk, ftype *channelGbar, ftype *gatePar,
-				ucomp *gateInfo, ftype *gateState,
+				int nChannels, ucomp *channelInfo, ucomp *gateInfo, ftype *gateState,
 				int compListSize, ucomp *compList, ftype *eLeak,
 
 				ftype *freeMem) {
@@ -238,7 +240,7 @@ __device__ void upperTriangularizeAll(HinesStruct *hList, ftype *sTriangList,
 	//__syncthreads();
 
 	evaluateCurrentsGNew( hList, active, vmListLocal, nChannels,
-			channelInfo, channelEk, channelGbar, gatePar, gateInfo, gateState,
+			channelInfo, gateInfo, gateState,
 			nComp, compListSize, compList, eLeak);
 
 	evaluateSynapticCurrentsNew(hList, active, vmListLocal, h.currStep * h.dt,
@@ -297,12 +299,11 @@ __device__ void upperTriangularizeAll(HinesStruct *hList, ftype *sTriangList,
 }
 
 
-__device__ void updateRhsG(HinesStruct *hList, 
+__device__ void updateRhsG(HinesStruct *hList,
 						   ftype *sMulList, ucomp *sMulListComp, ucomp *sMulListDest,
 						   ftype *rhsLocal, ftype *vmListLocal,
 
-						   int nChannels, ucomp *channelInfo, ftype *channelEk, ftype *channelGbar, ftype *gatePar,
-						   ucomp *gateInfo, ftype *gateState,
+						   int nChannels, ucomp *channelInfo, ucomp *gateInfo, ftype *gateState,
 						   int compListSize, ucomp *compList, ftype *eLeak,
 
 						   ftype *freeMem) {
@@ -326,7 +327,7 @@ __device__ void updateRhsG(HinesStruct *hList,
 	//__syncthreads();
 
 	evaluateCurrentsGNew( hList, active, vmListLocal, nChannels,
-			channelInfo, channelEk, channelGbar, gatePar, gateInfo, gateState,
+			channelInfo, gateInfo, gateState,
 			nComp, compListSize, compList, eLeak);
 
 
@@ -354,13 +355,10 @@ __device__ void backSubstituteG(HinesStruct *hList,
 	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 	HinesStruct & h = hList[neuron];
 
-	int nComp = h.nComp;
-	//int index1;
+	ucomp nComp = h.nComp;
 	int leftListSize = h.leftListSize;
 
 	ftype *vmTmpLocal = freeMem;
-
-	//index1 = nComp-1;
 
 	if (h.triangAll == 0 && h.compListSize > 0) // has active channels only in soma
 		vmTmpLocal[POS(nComp-1)] = rhsLocal[POS(nComp-1)] / ( sTriangList[(leftListSize-1)] - h.gActive[0]);
@@ -371,8 +369,8 @@ __device__ void backSubstituteG(HinesStruct *hList,
 
 	ftype tmp = 0;
 	for (int leftListPos = leftListSize-2; leftListPos >=0 ; leftListPos--) {
-		int line   = sLeftListLine[(leftListPos)];
-		int column = sLeftListColumn[(leftListPos)];
+		ucomp line   = sLeftListLine[(leftListPos)];
+		ucomp column = sLeftListColumn[(leftListPos)];
 		if (line == column) {
 			vmTmpLocal[POS(line)] = (rhsLocal[POS(line)] - tmp) * (1 / sTriangList[(leftListPos)]);
 			tmp = 0;
@@ -398,9 +396,9 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 	if (neuron >= nNeurons) return;
 	HinesStruct & h = hList[neuron];
-	int nComp = h.nComp;
-	int triangAll = h.triangAll;
-	int nGatesTotal = h.nGatesTotal;
+	ucomp nComp = h.nComp;
+	ucomp triangAll = h.triangAll;
+	ucomp nGatesTotal = h.nGatesTotal;
 
 	/******************************************************************************************
 	 * Alocates the shared memory
@@ -521,7 +519,7 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 		if (triangAll == 0) {
 			updateRhsG(hList, sMulList, sMulListComp, sMulListDest,
 					   rhsLocal, vmListLocal,
-					   h.nChannels, sChannelInfo, h.channelEk, h.channelGbar, h.gatePar,
+					   h.nChannels, sChannelInfo,
 					   sGateInfo, sGateState,
 					   h.compListSize, sActiveCompList, h.eLeak,
 					freeMem); // RYC
@@ -531,7 +529,7 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 
 			upperTriangularizeAll(hList, sTriangList, sLeftList, sLeftListLine, sLeftListColumn,
 					sLeftStartPos, rhsLocal, vmListLocal,
-					   h.nChannels, sChannelInfo, h.channelEk, h.channelGbar, h.gatePar,
+					   h.nChannels, sChannelInfo,
 					   sGateInfo, sGateState,
 					   h.compListSize, sActiveCompList, h.eLeak,
 					   freeMem);

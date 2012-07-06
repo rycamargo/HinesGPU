@@ -1,6 +1,7 @@
 #include "HinesMatrix.hpp"
 #include "PlatformFunctions.hpp"
-#include "HinesStruct.hpp"
+
+//#include "HinesStruct.hpp"
 #include "Connections.hpp"
 #include "SpikeStatistics.hpp"
 #include "NeuronInfoWriter.hpp"
@@ -17,12 +18,12 @@
 class PerformSimulation {
 
 private:
-	ThreadInfo * tInfo;
-	SharedNeuronGpuData *sharedData;
-	KernelInfo *kernelInfo;
+	struct ThreadInfo * tInfo;
+	struct SharedNeuronGpuData *sharedData;
+	struct KernelInfo *kernelInfo;
 
 public:
-    PerformSimulation(ThreadInfo *tInfo);
+    PerformSimulation(struct ThreadInfo *tInfo);
     int launchExecution();
     int performHostExecution();
 private:
@@ -31,8 +32,8 @@ private:
     void createNeurons( ftype dt );
     void createActivationLists( );
     void initializeThreadInformation();
-    void updateGenSpkStatistics(int *& nNeurons, SynapticData *& synData);
-    void generateRandomSpikes(int type, RandomSpikeInfo & randomSpkInfo);
+    void updateGenSpkStatistics(int *& nNeurons, struct SynapticData *& synData);
+    void generateRandomSpikes(int type, struct RandomSpikeInfo & randomSpkInfo);
 
 #ifdef MPI_GPU_NN
     void prepareMpiGeneratedSpikeStructures();

@@ -4,6 +4,13 @@
 #include "Connections.hpp"
 #include "SpikeStatistics.hpp"
 #include "GpuSimulationControl.hpp"
+
+#include "SynapticData.hpp"
+#include "KernelInfo.hpp"
+#include "ThreadInfo.hpp"
+#include "SharedNeuronGpuData.hpp"
+
+
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
@@ -152,6 +159,72 @@ void GpuSimulationControl::prepareSynapses() {
 	printf("Memory for Synapses: %10.3f MB.\n", spikeMem/(1024.*1024.));
 
 }
+
+void GpuSimulationControl::testGpuCommunication(int type) {
+
+	SynapticData *synData = sharedData->synData;
+
+	int globalActListSize = sharedData->hList[type][0].synapseListSize * sharedData->hList[type][0].activationListSize * tInfo->nNeurons[type];
+	cudaMemcpy(synData->activationListTest[type], sharedData->hList[type][0].activationList,
+			sizeof(ftype) * globalActListSize, cudaMemcpyDeviceToHost);
+
+	int neuronListSize = sharedData->hList[type][0].synapseListSize * sharedData->hList[type][0].activationListSize;
+
+	for (int n=0; n<tInfo->nNeurons[type]; n++)
+		for (int posN=0; posN<neuronListSize; posN++) {
+
+			int nSyn        = sharedData->hList[type][0].synapseListSize;
+			int actListSize = sharedData->hList[type][0].activationListSize;
+			int synapse = posN / actListSize;
+			int posSyn  = posN % actListSize;
+			int posRel  = (synData->activationListPosGlobal[type][n*nSyn + synapse] + posSyn ) % actListSize;
+
+			int s = posN * tInfo->nNeurons[type] + n;
+			if ( fabs(synData->activationListTest[type][s] - synData->activationListGlobal[type][s]) > 0.001) {
+
+				printf("type=%d neuron=%3d syn=%d, pos=%3d, posRel=%3d c=%5.2f|g=%5.2f\n", type, n, synapse, posSyn, posRel,
+						synData->activationListGlobal[type][s], synData->activationListTest[type][s]);
+				//assert (false);
+			}
+		}
+}
+
+void GpuSimulationControl::copyActivationListToGpu(int type) {
+
+	int globalActListSize = sharedData->hList[type][0].synapseListSize * sharedData->hList[type][0].activationListSize * tInfo->nNeurons[type];
+	cudaMemcpy(sharedData->hList[type][0].activationList, sharedData->synData->activationListGlobal[type],
+			sizeof(ftype) * globalActListSize, cudaMemcpyHostToDevice);
+
+}
+
+void GpuSimulationControl::copyActivationListFromGpu() {
+
+	SynapticData *synData = sharedData->synData;
+
+	for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++) {
+
+		int globalActListSize = sharedData->hList[type][0].synapseListSize * sharedData->hList[type][0].activationListSize * tInfo->nNeurons[type];
+		cudaMemcpy(synData->activationListGlobal[type], sharedData->hList[type][0].activationList,
+				sizeof(ftype) * globalActListSize, cudaMemcpyDeviceToHost);
+
+		SynapticChannels *synChannel = sharedData->matrixList[type][0].synapticChannels;
+		cudaMemcpy(synData->activationListPosGlobal[type], sharedData->hList[type][0].activationListPos,
+				sizeof(ucomp) * synChannel->synapseListSize * tInfo->nNeurons[type], cudaMemcpyDeviceToHost);
+
+	}
+
+}
+
+void GpuSimulationControl::transferHinesStructToGpu() {
+
+	for(int type = tInfo->startTypeThread;type < tInfo->endTypeThread;type++){
+
+		cudaMalloc((void**)((((&(sharedData->hGpu[type]))))), sizeof (HinesStruct) * tInfo->nNeurons[type]);
+		cudaMemcpy(sharedData->hGpu[type], sharedData->hList[type], sizeof (HinesStruct) * tInfo->nNeurons[type], cudaMemcpyHostToDevice);
+		checkCUDAError("Memory Allocation [hGPU]:");
+	}
+}
+
 
 int GpuSimulationControl::prepareExecution(int type) {
 
@@ -345,7 +418,7 @@ int GpuSimulationControl::prepareExecution(int type) {
 	return 0;
 }
 
-void GpuSimulationControl::performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo) {
+void GpuSimulationControl::performGPUCommunications(int type, struct RandomSpikeInfo & randomSpkInfo) {
 
 	/**
 	 * Transfers the list of random spikes to the GPU
@@ -551,7 +624,7 @@ void GpuSimulationControl::configureGpuKernel()
 	 *--------------------------------------------------------------*/
     int nDevices = 0;
     cudaGetDeviceCount(&nDevices);
-    cudaSetDevice((tInfo->threadNumber + (2 * tInfo->currProcess) + 1) % nDevices);
+    cudaSetDevice((tInfo->threadNumber + tInfo->currProcess + 1) % nDevices);
     cudaGetDevice(&(tInfo->deviceNumber));
     tInfo->prop = new struct cudaDeviceProp;
     cudaGetDeviceProperties(tInfo->prop, tInfo->deviceNumber);
@@ -572,7 +645,7 @@ void GpuSimulationControl::configureGpuKernel()
         kernelInfo->sharedMemSizeComm = 15 * 1024; // Valid for capability 2.x (48kB)
     }
     else if(tInfo->prop->major == 3){
-      kernelInfo->maxThreadsProc = 256;
+      kernelInfo->maxThreadsProc = 384;//384;
       kernelInfo->maxThreadsComm = 32; // or can be 64
       kernelInfo->sharedMemSizeProc = 47 * 1024; // Valid for capability 2.x (48kB)
       kernelInfo->sharedMemSizeComm = 15 * 1024; // Valid for capability 2.x (48kB)

@@ -1,14 +1,18 @@
-#include "HinesStruct.hpp"
-
 #ifndef NEURONINFOWRITER_H_
 #define NEURONINFOWRITER_H_
+
+#include "Definitions.hpp"
+//#include "HinesStruct.hpp"
+//#include "ThreadInfo.hpp"
+//#include "SharedNeuronGpuData.hpp"
+//#include "KernelInfo.hpp"
 
 class NeuronInfoWriter {
 
 private:
-	ThreadInfo *tInfo;
-	SharedNeuronGpuData *sharedData;
-	KernelInfo *kernelInfo;
+	struct KernelInfo *kernelInfo;
+	struct ThreadInfo *tInfo;
+	struct SharedNeuronGpuData *sharedData;
 
 	ftype **vmTimeSerie;
 	int vmTimeSerieMemSize;
@@ -22,7 +26,7 @@ private:
 	int *neuronList;
 
 public:
-	NeuronInfoWriter(ThreadInfo *tInfo);
+	NeuronInfoWriter(struct ThreadInfo *tInfo);
 	~NeuronInfoWriter();
 
 	//void setMonitoredList( int nMonitored, int *groupList, int *neuronList );
@@ -32,7 +36,7 @@ public:
     void updateSampleVm(int kStep);
     void writeSampleVm(int kStep);
 
-    void writeResultsToFile(char mode, int nNeuronsTotal, int nComp, BenchTimes & bench);
+    void writeResultsToFile(char mode, int nNeuronsTotal, int nComp, struct BenchTimes & bench);
 };
 
 #endif /* NEURONINFOWRITER_H_ */

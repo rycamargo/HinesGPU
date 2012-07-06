@@ -1,9 +1,10 @@
 #include "HinesMatrix.hpp"
 #include "PlatformFunctions.hpp"
-#include "HinesStruct.hpp"
+//#include "HinesStruct.hpp"
 #include "Connections.hpp"
 #include "SpikeStatistics.hpp"
 #include "NeuronInfoWriter.hpp"
+#include "RandomSpikeInfo.hpp"
 
 #include <cassert>
 #include <cstdlib>
@@ -17,12 +18,12 @@
 class GpuSimulationControl {
 
 private:
-	ThreadInfo * tInfo;
-	SharedNeuronGpuData *sharedData;
-	KernelInfo *kernelInfo;
+	struct ThreadInfo * tInfo;
+	struct SharedNeuronGpuData *sharedData;
+	struct KernelInfo *kernelInfo;
 
 public:
-	GpuSimulationControl(ThreadInfo *tInfo);
+	GpuSimulationControl(struct ThreadInfo *tInfo);
 	//int launchGpuExecution();
 
 //private:
@@ -34,9 +35,13 @@ public:
     void createGpuCommunicationStructures();
     void configureGpuKernel();
 
-    void performGPUCommunications(int type, RandomSpikeInfo & randomSpkInfo);
+    void performGPUCommunications(int type, struct RandomSpikeInfo & randomSpkInfo);
     void performGpuNeuronalProcessing();
 
+    void transferHinesStructToGpu();
+    void testGpuCommunication(int type);
+    void copyActivationListToGpu(int type);
+    void copyActivationListFromGpu();
     void copyGeneratedSpikeListsToGPU();
     void readGeneratedSpikesFromGPU();
 

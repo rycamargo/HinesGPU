@@ -6,6 +6,7 @@
  */
 
 #include "Connections.hpp"
+#include "HinesStruct.hpp"
 #include <cstdio>
 #include <cassert>
 

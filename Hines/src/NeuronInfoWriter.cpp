@@ -1,5 +1,11 @@
 #include <cstdio>
 #include "NeuronInfoWriter.hpp"
+#include "SynapticData.hpp"
+#include "KernelInfo.hpp"
+#include "ThreadInfo.hpp"
+#include "HinesMatrix.hpp"
+#include "SharedNeuronGpuData.hpp"
+//#include "HinesStruct.hpp"
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -86,12 +92,12 @@ void NeuronInfoWriter::writeSampleVm(int kStep)
     if(benchConf.verbose == 1)
         printf("Writing Sample Vms thread=%d\n", tInfo->threadNumber);
 
-    if (benchConf.checkProcMode(NN_GPU) ) {
-    	for(int k = 0; k < nVmTimeSeries; k++)
-    		if(tInfo->startTypeThread <= groupList[k] && groupList[k] < tInfo->endTypeThread)
-    			cudaMemcpy(vmTimeSerie[k], sharedData->hList[ groupList[k] ][ neuronList[k] ].vmTimeSerie,
-    					vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
-    }
+//    if (benchConf.checkProcMode(NN_GPU) ) {
+//    	for(int k = 0; k < nVmTimeSeries; k++)
+//    		if(tInfo->startTypeThread <= groupList[k] && groupList[k] < tInfo->endTypeThread)
+//    			cudaMemcpy(vmTimeSerie[k], sharedData->hList[ groupList[k] ][ neuronList[k] ].vmTimeSerie,
+//    					vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
+//    }
 
 	for(int i = kStep;i < kStep + kernelInfo->nKernelSteps; i++)
 		fprintf(outFile, "%10.2f\t%10.2f\t%10.2f\t%10.2f\t%10.2f\n", sharedData->dt * (i + 1),

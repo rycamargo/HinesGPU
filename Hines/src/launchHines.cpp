@@ -42,12 +42,15 @@
 #include <ctime>
 #include <pthread.h>
 
+#include "SharedNeuronGpuData.hpp"
+#include "KernelInfo.hpp"
+#include "ThreadInfo.hpp"
 #include "PerformSimulation.hpp"
 #include "Connections.hpp"
 #include "HinesMatrix.hpp"
 #include "ActiveChannels.hpp"
 #include "PlatformFunctions.hpp"
-#include "HinesStruct.hpp"
+//#include "HinesStruct.hpp"
 #include "SpikeStatistics.hpp"
 //#include "GpuSimulationControl.hpp"
 
@@ -161,7 +164,7 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 			benchConf.printAllVmKernelFinish = 1; //1
 			benchConf.printAllSpikeTimes = 1; //1
 
-			tInfo->sharedData->totalTime   = 1000; // 10s
+			tInfo->sharedData->totalTime   = 100; // 10s
 			tInfo->sharedData->inputSpikeRate = 0.01;
 			tInfo->sharedData->pyrConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
 			tInfo->sharedData->inhConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
@@ -232,7 +235,7 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 			if (simType[0] == 'n') benchConf.gpuCommBenchMode = GPU_COMM_SIMPLE;
 			else if (simType[0] == 'd') benchConf.gpuCommBenchMode = GPU_COMM_DETAILED;
 
-			tInfo->sharedData->totalTime   = 100;
+			tInfo->sharedData->totalTime   = 1000;
 			tInfo->sharedData->inputSpikeRate = 0.01;
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05

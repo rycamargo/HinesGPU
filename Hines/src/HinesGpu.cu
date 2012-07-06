@@ -28,6 +28,7 @@
 #include <device_launch_parameters.h> // Necessary to allow better eclipse integration
 #include <device_functions.h> // Necessary to allow better eclipse integration
 
+
 //#define POS(i) (i) + nComp*threadIdx.x
 #define POS(i) (i)*blockDim.x+threadIdx.x
 //#define POS1(i) (i) + leftListSize*threadIdx.x
@@ -388,11 +389,6 @@ __device__ void backSubstituteG(HinesStruct *hList,
 
 __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype *vmListGlobal) {
 
-
-	//return;
-
-	//printf("Starting Kernel...\n");
-
 	int neuron = blockIdx.x * blockDim.x + threadIdx.x;
 	if (neuron >= nNeurons) return;
 	HinesStruct & h = hList[neuron];
@@ -515,14 +511,10 @@ __global__ void solveMatrixG(HinesStruct *hList, int nSteps, int nNeurons, ftype
 
 	for(int gStep = 0; gStep < nSteps; gStep++ ) {
 
-		//printf ("SolveMatrixG: Ok1\n");
 		if (triangAll == 0) {
-			updateRhsG(hList, sMulList, sMulListComp, sMulListDest,
-					   rhsLocal, vmListLocal,
-					   h.nChannels, sChannelInfo,
-					   sGateInfo, sGateState,
-					   h.compListSize, sActiveCompList, h.eLeak,
-					freeMem); // RYC
+			updateRhsG(hList, sMulList, sMulListComp, sMulListDest, rhsLocal, vmListLocal,
+					h.nChannels, sChannelInfo, sGateInfo, sGateState,
+					h.compListSize, sActiveCompList, h.eLeak, freeMem); // RYC
 			backSubstituteG(hList, sLeftList, sLeftListLine, sLeftListColumn, rhsLocal, vmListLocal, freeMem); // RYC
 		}
 		else {

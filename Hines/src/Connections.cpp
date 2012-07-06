@@ -6,7 +6,9 @@
  */
 
 #include "Connections.hpp"
-//#include "SynapticChannels.hpp"
+#include "HinesMatrix.hpp"
+#include "ThreadInfo.hpp"
+#include "SharedNeuronGpuData.hpp"
 #include <cstdlib>
 #include <cstdio>
 #include <cassert>
@@ -40,7 +42,7 @@ ConnectionInfo *Connections::getConnectionInfo () {
 	ConnectionInfo *connInfo = new ConnectionInfo;
 
 	// Counts the total number of connections
-	map< int, std::vector<Conn> >::iterator p;
+	std::map< int, std::vector<Conn> >::iterator p;
 	for(p = connMap.begin(); p != connMap.end(); p++)
 		countTotal += p->second.size();
 
@@ -266,7 +268,7 @@ int Connections::connectTypeToTypeOneToOne( ThreadInfo *tInfo,
 }
 
 
-int Connections::connectRandom ( ThreadInfo *tInfo ) {
+int Connections::connectRandom ( struct ThreadInfo *tInfo ) {
 
 	SharedNeuronGpuData *sharedData = tInfo->sharedData;
 

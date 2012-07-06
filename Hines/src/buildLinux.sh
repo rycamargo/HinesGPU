@@ -1,5 +1,11 @@
 g++ -I/home/rcamargo/cuda/include/ -c -O3 SynapticChannels.cpp launchHines.cpp ActiveChannels.cpp HinesMatrix.cpp PlatformFunctions.cpp SynapticChannels.cpp Connections.cpp SpikeStatistics.cpp NeuronInfoWriter.cpp PerformSimulation.cpp CpuSimulationControl.cpp
-nvcc $1 --compiler-options -O3 -maxrregcount=124 --ptxas-options=-v -m64 -arch sm_13 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
+
+#-ftz=true -prec-div=false -prec-sqrt=false
+nvcc $1 --compiler-options -O3 --ptxas-options=-v -m64 -arch=sm_30 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
+
+#nvcc $1 --compiler-options -O3 --ptxas-options=-v -m64 -arch=sm_30 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
+
+#nvcc $1 --compiler-options -O3 -maxrregcount=124 --ptxas-options=-v -m64 -arch sm_13 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
 
 #OpenMPI 1.2
 #g++ -c -D_REENTRANT -O3 SynapticChannels.cpp launchHines.cpp ActiveChannels.cpp HinesMatrix.cpp PlatformFunctions.cpp SynapticChannels.cpp Connections.cpp SpikeStatistics.cpp

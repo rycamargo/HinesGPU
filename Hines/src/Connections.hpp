@@ -9,7 +9,8 @@
 #define CONNECTIONS_H_
 
 #include "Definitions.hpp"
-#include "HinesStruct.hpp"
+//#include "HinesStruct.hpp"
+//#include "ThreadInfo.hpp"
 #include <vector>
 
 //#define __aligned__ ignored
@@ -83,20 +84,20 @@ public:
 	ConnectionInfo *getConnectionInfo ();
 	void clearMPIConnections(ConnectionInfo *connInfo);
 
-	void setPositionsPlanar (ThreadInfo *tInfo, ucomp type, ftype totalLength);
+	void setPositionsPlanar (struct ThreadInfo *tInfo, ucomp type, ftype totalLength);
 
 	int connectTypeToTypeRandom(
-			ThreadInfo *tInfo, int sourceType, int destType, ucomp synapse,
+			struct ThreadInfo *tInfo, int sourceType, int destType, ucomp synapse,
 			ftype connRatio, ftype baseW, ftype randW, ftype baseD, ftype randD);
 
-	int connectTypeToTypeOneToOne( ThreadInfo *tInfo,
+	int connectTypeToTypeOneToOne( struct ThreadInfo *tInfo,
 			int sourceType, int destType, ucomp synapse, ftype baseW, ftype baseD);
 
 	int connectAssociativeFromFile (char *filename);
-	int connectRandom ( ThreadInfo *tInfo );
+	int connectRandom ( struct ThreadInfo *tInfo );
 	int createTestConnections ();
 private:
-    int transformToCombinedConnection(ThreadInfo *tInfo, int destType, int neuron);
+    int transformToCombinedConnection(struct ThreadInfo *tInfo, int destType, int neuron);
 };
 
 #endif /* CONNECTIONS_H_ */

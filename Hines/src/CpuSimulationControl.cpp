@@ -6,11 +6,14 @@
 #include "GpuSimulationControl.hpp"
 #include "CpuSimulationControl.hpp"
 
+#include "SharedNeuronGpuData.hpp"
 #include "Connections.hpp"
 #include "HinesMatrix.hpp"
 #include "ActiveChannels.hpp"
 #include "PlatformFunctions.hpp"
-#include "HinesStruct.hpp"
+#include "SynapticData.hpp"
+#include "KernelInfo.hpp"
+#include "ThreadInfo.hpp"
 #include "SpikeStatistics.hpp"
 
 CpuSimulationControl::CpuSimulationControl(ThreadInfo *tInfo) {

@@ -4,7 +4,11 @@ MPI_LINK_FLAGS="-L/usr/lib -lmpich -lopa -lmpl -lrt -lcr -lpthread"
 #$(echo $(mpicc --showme:link))
         
 g++ -c -O3  ${MPI_COMPILE_FLAGS} SynapticChannels.cpp launchHines.cpp ActiveChannels.cpp HinesMatrix.cpp PlatformFunctions.cpp SynapticChannels.cpp Connections.cpp SpikeStatistics.cpp NeuronInfoWriter.cpp PerformSimulation.cpp CpuSimulationControl.cpp
-nvcc $1 ${MPI_COMPILE_FLAGS} ${MPI_LINK_FLAGS} --compiler-options -O3 --ptxas-options=-v -m64 -arch sm_30 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
+
+nvcc $1 ${MPI_COMPILE_FLAGS} ${MPI_LINK_FLAGS} --compiler-options -O3 --ptxas-options=-v -m64 -gencode arch=compute_30,code=sm_30 -gencode arch=compute_13,code=sm_13 -gencode arch=compute_20,code=sm_20 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
+
+#nvcc $1 ${MPI_COMPILE_FLAGS} ${MPI_LINK_FLAGS} --compiler-options -O3 --ptxas-options=-v -m64 -arch sm_30 -o HinesGpu ActiveChannels.o HinesMatrix.o PlatformFunctions.o SynapticChannels.o Connections.o SpikeStatistics.o launchHines.o NeuronInfoWriter.o PerformSimulation.o CpuSimulationControl.o HinesGpu.cu GpuSimulationControl.cu SynapticComm.cu
+
 
 #OpenMPI 1.2
 #g++ -c -D_REENTRANT -O3 SynapticChannels.cpp launchHines.cpp ActiveChannels.cpp HinesMatrix.cpp PlatformFunctions.cpp SynapticChannels.cpp Connections.cpp SpikeStatistics.cpp

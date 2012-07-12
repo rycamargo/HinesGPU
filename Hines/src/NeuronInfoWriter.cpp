@@ -41,14 +41,24 @@ NeuronInfoWriter::NeuronInfoWriter(ThreadInfo *tInfo) {
 
     groupList  = (int *)malloc(sizeof(int)*nVmTimeSeries);
     neuronList = (int *)malloc(sizeof(int)*nVmTimeSeries);
-    groupList[0]  = tInfo->startTypeThread;
     neuronList[0] = 0;
-    groupList[1]  = tInfo->startTypeThread;
     neuronList[1] = 1;
-    groupList[2]  = tInfo->startTypeThread+1;
     neuronList[2] = 2;
-    groupList[3]  = tInfo->startTypeThread+1;
     neuronList[3] = 3;
+
+    groupList[0]  = tInfo->startTypeThread;
+    groupList[1]  = tInfo->startTypeThread;
+
+    if (tInfo->endTypeThread - tInfo->startTypeThread > 1) {
+    	groupList[2]  = tInfo->startTypeThread+1;
+    	groupList[3]  = tInfo->startTypeThread+1;
+    }
+    else {
+        groupList[2]  = tInfo->startTypeThread;
+        groupList[3]  = tInfo->startTypeThread;
+    }
+
+
 
 }
 
@@ -108,7 +118,8 @@ void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nCom
 		BenchTimes & bench) {
 
 	printf ("Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
-	printf ("HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n", bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
+	printf ("HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f mpiConnWait=%-10.3f\n",
+			bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite, bench.totalMpiSpikeTransfer);
 	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio, tInfo->sharedData->inhConnRatio);
 
 	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu \

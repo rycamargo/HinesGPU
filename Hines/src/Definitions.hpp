@@ -15,7 +15,7 @@
 
 #define PI 3.14159
 
-#define GENSPIKETIMELIST_SIZE 5
+#define GENSPIKETIMELIST_SIZE 2
 
 #define FTYPE_FLOAT
 //#define FTYPE_DOUBLE

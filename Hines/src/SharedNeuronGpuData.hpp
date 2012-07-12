@@ -7,6 +7,9 @@
 //#include "SpikeStatistics.hpp"
 //#include "NeuronInfoWriter.hpp"
 
+#define CONNECT_RANDOM_1 1
+#define CONNECT_RANDOM_2 2
+
 struct SharedNeuronGpuData {
 	class HinesMatrix **matrixList;	// Only exists for the types of the MPI process
 	struct HinesStruct **hList;
@@ -31,6 +34,7 @@ struct SharedNeuronGpuData {
 	struct ConnGpu **connGpuListHost;
 	struct ConnGpu **connGpuListDevice;
 
+	int connectivityType;
 	ftype inputSpikeRate;
 	ftype pyrConnRatio;
 	ftype inhConnRatio;

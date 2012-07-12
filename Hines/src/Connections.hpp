@@ -95,6 +95,7 @@ public:
 
 	int connectAssociativeFromFile (char *filename);
 	int connectRandom ( struct ThreadInfo *tInfo );
+	int connectRandom2( struct ThreadInfo *tInfo );
 	int createTestConnections ();
 private:
     int transformToCombinedConnection(struct ThreadInfo *tInfo, int destType, int neuron);

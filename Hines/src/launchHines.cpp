@@ -237,6 +237,7 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 
 			tInfo->sharedData->totalTime   = 1000;
 			tInfo->sharedData->inputSpikeRate = 0.01;
+			tInfo->sharedData->connectivityType = CONNECT_RANDOM_1;
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05
 			tInfo->sharedData->pyrInhWeight = 0.1; //1.0/(nPyramidal/100.0);
@@ -305,6 +306,8 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 				}
 			}
 
+
+
 //			if (simType[3] != 0) {
 //				int batch[] = { 0, 100, 75, 50, 25, 10, 5, 1};
 //				char *posChar = new char[1];
@@ -314,6 +317,63 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 //				delete[] posChar;
 //			}
 
+		}
+
+
+		else if (simType[0] == 'c') {
+			printf ("Simulation configured as: Running cluster experiments.\n");
+
+			benchConf.printSampleVms = 1;
+			benchConf.printAllVmKernelFinish = 0;
+			benchConf.printAllSpikeTimes = 0;
+			benchConf.checkGpuComm = 0;
+
+			if (mode=='G')      benchConf.setMode(NN_GPU, NN_GPU);
+			else if (mode=='H') benchConf.setMode(NN_GPU, NN_CPU);
+			else if (mode=='C') benchConf.setMode(NN_CPU, NN_CPU);
+			else if (mode=='T') benchConf.setMode(NN_GPU, NN_TEST);
+
+			benchConf.gpuCommBenchMode = GPU_COMM_SIMPLE;
+
+			tInfo->sharedData->totalTime   = 1000;
+			tInfo->sharedData->inputSpikeRate = 0.01;
+			tInfo->sharedData->connectivityType = CONNECT_RANDOM_2;
+
+			tInfo->sharedData->excWeight = 0.01;
+			tInfo->sharedData->pyrInhWeight = 0.1;
+			tInfo->sharedData->inhPyrWeight = 1;
+
+
+			if (simType[1] == '1') {
+				tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
+				tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
+
+				if (simType[2] == 'l') { // 200k: 0.92
+					tInfo->sharedData->excWeight    = 0.020; // 0.030;
+					tInfo->sharedData->pyrInhWeight = 0.100; // 0.035;
+					tInfo->sharedData->inhPyrWeight = 0.100; // 10;
+				}
+				if (simType[2] == 'h') { // 10Hz
+					tInfo->sharedData->excWeight    = 0.020; // 0.100;
+					tInfo->sharedData->pyrInhWeight = 0.000; // 0.030;
+					tInfo->sharedData->inhPyrWeight = 0.100; // 1;
+				}
+			}
+			else if (simType[1] == '2') {
+				tInfo->sharedData->pyrConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->inhConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+
+				if (simType[2] == 'l') { // 100k: 1.19
+					tInfo->sharedData->excWeight    = 0.004; // 0.004;
+					tInfo->sharedData->pyrInhWeight = 0.004; // 0.004;
+					tInfo->sharedData->inhPyrWeight = 1.000; // 10;
+				}
+				if (simType[2] == 'h') { // 10k: 5.26
+					tInfo->sharedData->excWeight    = 0.008; // 0.008;
+					tInfo->sharedData->pyrInhWeight = 0.004; // 0.004;
+					tInfo->sharedData->inhPyrWeight = 1.000; // 1;
+				}
+			}
 		}
 }
 

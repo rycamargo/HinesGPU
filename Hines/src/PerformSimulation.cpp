@@ -391,10 +391,6 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 					if ( kPos < rate ) {
 						ftype spkTime = currTime + (int)( kPos * kernelSteps ) * dt;
 
-						// New implementation
-						if (type ==0 && neuron == 0)
-						    printf("randomSpike at %.2f.\n", spkTime);
-
 						if (benchConf.checkCommMode(NN_GPU) ) {
 							assert(randomSpkInfo.nRandom < randomSpkInfo.listSize);
 							randomSpkInfo.spikeTimes[randomSpkInfo.nRandom] = spkTime;
@@ -466,7 +462,14 @@ int PerformSimulation::launchExecution() {
 	 *--------------------------------------------------------------*/
     if (threadNumber == 0) {
 		sharedData->connection = new Connections();
-		sharedData->connection->connectRandom (tInfo );
+		if (sharedData->connectivityType == CONNECT_RANDOM_1)
+			sharedData->connection->connectRandom ( tInfo );
+		else if (sharedData->connectivityType == CONNECT_RANDOM_2)
+			sharedData->connection->connectRandom2 ( tInfo );
+		else {
+			printf("ERROR: Invalid connectivity type");
+			exit(-1);
+		}
 
 		if (benchConf.checkCommMode(NN_GPU) ) {
 			sharedData->connGpuListHost   = (ConnGpu **)malloc(tInfo->totalTypes * sizeof(ConnGpu *));
@@ -587,7 +590,7 @@ int PerformSimulation::launchExecution() {
 
 		// Synchronizes the thread to wait for the communication
 
-		if (threadNumber == 0 && tInfo->kStep % 100 == 0)
+		if (threadNumber == 0 && tInfo->kStep % 1000 == 0)
 			printf("Starting Kernel %d -----------> %d \n", threadNumber, tInfo->kStep);
 
 		if (threadNumber == 0) // Benchmarking

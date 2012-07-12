@@ -267,7 +267,6 @@ int Connections::connectTypeToTypeOneToOne( ThreadInfo *tInfo,
 	return nConnTotal;
 }
 
-
 int Connections::connectRandom ( struct ThreadInfo *tInfo ) {
 
 	SharedNeuronGpuData *sharedData = tInfo->sharedData;
@@ -313,3 +312,35 @@ int Connections::connectRandom ( struct ThreadInfo *tInfo ) {
 	return 0;
 }
 
+int Connections::connectRandom2 ( struct ThreadInfo *tInfo ) {
+
+	SharedNeuronGpuData *sharedData = tInfo->sharedData;
+
+	setPositionsPlanar(tInfo, PYRAMIDAL_CELL,  10e-3);
+	setPositionsPlanar(tInfo, INHIBITORY_CELL, 10e-3);
+
+	int nConnTotal = 0;
+
+	/**
+	 * Connects the pyramidal-pyramidal cells
+	 */
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, PYRAMIDAL_CELL, PYRAMIDAL_CELL, 0, sharedData->pyrConnRatio,
+			sharedData->excWeight, 0.5, 10, 10);
+
+	/**
+	 * Connects the pyramidal-inhibitory cells
+	 */
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio/10,
+			sharedData->pyrInhWeight, 0.5, 10, 10);
+
+	/**
+	 * Connects the inhibitory-pyramidal cells
+	 */
+	nConnTotal += connectTypeToTypeRandom(
+			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhConnRatio/10,
+			sharedData->inhPyrWeight, 0.5, 10, 10);
+
+	return 0;
+}

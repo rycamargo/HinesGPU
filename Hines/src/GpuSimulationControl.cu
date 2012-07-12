@@ -624,6 +624,12 @@ void GpuSimulationControl::configureGpuKernel()
 	 *--------------------------------------------------------------*/
     int nDevices = 0;
     cudaGetDeviceCount(&nDevices);
+	if (nDevices == 0) {
+		printf("ERROR: No valid CUDA devices found. Exiting...\n");
+		exit(-1);
+	}
+
+
     cudaSetDevice((tInfo->threadNumber + tInfo->currProcess + 1) % nDevices);
     cudaGetDevice(&(tInfo->deviceNumber));
     tInfo->prop = new struct cudaDeviceProp;

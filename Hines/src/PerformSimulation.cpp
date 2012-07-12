@@ -20,6 +20,7 @@
 #include "SpikeStatistics.hpp"
 
 #include <cmath>
+#include <unistd.h>
 
 #ifdef MPI_GPU_NN
 #include <mpi.h>
@@ -116,25 +117,31 @@ void PerformSimulation::initializeThreadInformation(){
 
 void PerformSimulation::updateBenchmark()
 {
-    if(benchConf.checkCommMode(NN_CPU) ) {
+	if(benchConf.checkCommMode(NN_CPU) ) {
 
-				bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
-				bench.totalConnRead	  	+= (bench.connRead 		- bench.kernelFinish)/1000.;
-				bench.totalConnWait		+= (bench.connWait 		- bench.connRead)/1000.;
-				bench.totalConnWrite	+= (bench.connWrite 	- bench.connWait)/1000.;
-			}
-			else if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE) {
-				bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
-				bench.totalConnWait		+= (bench.connWait 		- bench.kernelFinish)/1000.;
-				bench.totalConnRead	  	+=  bench.connRead  / 1000.;
-				bench.totalConnWrite	+= (bench.connWrite - bench.connWait - bench.connRead)/1000.;
-			}
-			else if (benchConf.gpuCommBenchMode == GPU_COMM_DETAILED) {
-				bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
-				bench.totalConnWait		+= (bench.connWait 		- bench.kernelFinish)/1000.;
-				bench.totalConnRead	  	+=  bench.connRead  / 1000.;
-				bench.totalConnWrite	+=  bench.connWrite / 1000.;
-			}
+		bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
+		bench.totalConnRead	  	+= (bench.connRead 		- bench.kernelFinish)/1000.;
+		bench.totalConnWait		+= (bench.connWait 		- bench.connRead)/1000.;
+		bench.totalConnWrite	+= (bench.connWrite 	- bench.connWait)/1000.;
+	}
+	else if (benchConf.gpuCommBenchMode == GPU_COMM_SIMPLE) {
+		bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
+		bench.totalConnWait		+= (bench.connWait 		- bench.kernelFinish)/1000.;
+		bench.totalConnRead	  	+=  bench.connRead  / 1000.;
+		bench.totalConnWrite	+= (bench.connWrite - bench.connWait - bench.connRead)/1000.;
+//#ifdef MPI_GPU_NN
+		bench.totalMpiSpikeTransfer += (bench.mpiSpikeTransferEnd - bench.mpiSpikeTransferStart)/1000.;
+//#endif
+	}
+	else if (benchConf.gpuCommBenchMode == GPU_COMM_DETAILED) {
+		bench.totalHinesKernel	+= (bench.kernelFinish 	- bench.kernelStart)/1000.;
+		bench.totalConnWait		+= (bench.connWait 		- bench.kernelFinish)/1000.;
+		bench.totalConnRead	  	+=  bench.connRead  / 1000.;
+		bench.totalConnWrite	+=  bench.connWrite / 1000.;
+#ifdef MPI_GPU_NN
+		bench.totalMpiSpikeTransfer += (bench.mpiSpikeTransferEnd - bench.mpiSpikeTransferStart)/1000.;
+#endif
+	}
 }
 
 void PerformSimulation::syncCpuThreads()
@@ -154,19 +161,94 @@ void PerformSimulation::syncCpuThreads()
 #ifdef MPI_GPU_NN
 void PerformSimulation::broadcastGeneratedSpikesMPISync()
 {
-    /*--------------------------------------------------------------
-		 * [MPI] Send the list of generated spikes to other processes
-		 *--------------------------------------------------------------*/
-    if (tInfo->threadNumber == 0) {
-			for (int type=0; type < tInfo->totalTypes; type++) {
-				int genSpikeListTypeSize = GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type];
-				MPI_Bcast (sharedData->synData->genSpikeTimeListHost[type], genSpikeListTypeSize, MPI_FTYPE, tInfo->typeProcess[type], MPI_COMM_WORLD);
-				MPI_Bcast (sharedData->synData->nGeneratedSpikesHost[type], tInfo->nNeurons[type],       MPI_UCOMP, tInfo->typeProcess[type], MPI_COMM_WORLD);
+
+	//MPI_Bcast (sharedData->synData->genSpikeTimeListHost[type], genSpikeListTypeSize,  MPI_FTYPE, tInfo->typeProcess[type], MPI_COMM_WORLD);
+
+	SynapticData *synData = sharedData->synData;
+
+	/*--------------------------------------------------------------
+	 * [MPI] Send the list of generated spikes to other processes
+	 *--------------------------------------------------------------*/
+
+	syncCpuThreads(); // Not necessary. Is here only for benchmarking
+	if (tInfo->threadNumber == 0)
+		bench.mpiSpikeTransferStart = gettimeInMilli();
+
+	// TODO: Check what is the used as the neuron index
+	for(int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++){
+		int pos = 0;
+		sharedData->nSpikesMpiComm[type] = 0;
+		for (int neuron=0; neuron < tInfo->nNeurons[type]; neuron++) {
+			for (int spk=0; spk < synData->nGeneratedSpikesHost[type][neuron]; spk++) {
+				sharedData->neuronSpikeMpiComm[type][pos] = neuron;
+				sharedData->spikeTimesMpiComm[type][pos]  = synData->genSpikeTimeListHost[type][neuron * GENSPIKETIMELIST_SIZE + spk];
+				pos++;
+				sharedData->nSpikesMpiComm[type]++;
 			}
 		}
-    // Synchronizes the thread to wait for the communication
-    syncCpuThreads();
+		assert (pos <= GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type]);
+	}
+
+	syncCpuThreads(); // Necessary to guarantee that all tables were updated
+
+	if (tInfo->threadNumber == 0) {
+		//bench.mpiSpikeTransferStart = gettimeInMilli();
+		for (int type=0; type < tInfo->totalTypes; type++) {
+			MPI_Bcast (&sharedData->nSpikesMpiComm[type],                       1, MPI_INT32_T,tInfo->typeProcess[type], MPI_COMM_WORLD);
+			MPI_Bcast (sharedData->neuronSpikeMpiComm[type], sharedData->nSpikesMpiComm[type], MPI_INT32_T,tInfo->typeProcess[type], MPI_COMM_WORLD);
+			MPI_Bcast (sharedData->spikeTimesMpiComm[type],  sharedData->nSpikesMpiComm[type], MPI_FTYPE,  tInfo->typeProcess[type], MPI_COMM_WORLD);
+		}
+		//bench.mpiSpikeTransferEnd = gettimeInMilli();
+	}
+
+	syncCpuThreads(); // Necessary to wait while thread receives the data
+
+	for (int type=0; type < tInfo->totalTypes; type++) {
+
+		if (tInfo->startTypeProcess <= type && type < tInfo->endTypeProcess)
+			continue;
+
+		// TODO: Find some way to divide the work
+		//for(int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++){
+		if (tInfo->threadNumber == 0) {
+
+			for (int neuron=0; neuron<tInfo->nNeurons[type]; neuron++)
+				synData->nGeneratedSpikesHost[type][neuron] = 0;
+
+			for (int k=0; k<sharedData->nSpikesMpiComm[type]; k++) {
+
+				int neuron = sharedData->neuronSpikeMpiComm[type][k];
+				int pos = neuron * GENSPIKETIMELIST_SIZE + synData->nGeneratedSpikesHost[type][neuron];
+				synData->genSpikeTimeListHost[type][ pos ] = sharedData->spikeTimesMpiComm[type][k];
+				synData->nGeneratedSpikesHost[type][neuron]++;
+			}
+		}
+	}
+
+	syncCpuThreads(); // Not necessary. Is here only for benchmarking
+	if (tInfo->threadNumber == 0)
+		bench.mpiSpikeTransferEnd = gettimeInMilli();
+
+	// Synchronizes the thread to wait for the communication
+
 }
+
+//void PerformSimulation::broadcastGeneratedSpikesMPISync() {
+//	/*--------------------------------------------------------------
+//	 * [MPI] Send the list of generated spikes to other processes
+//	 *--------------------------------------------------------------*/
+//	if (tInfo->threadNumber == 0) {
+//		bench.mpiSpikeTransferStart = gettimeInMilli();
+//		for (int type=0; type < tInfo->totalTypes; type++) {
+//			int genSpikeListTypeSize = GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type];
+//			MPI_Bcast (sharedData->synData->genSpikeTimeListHost[type], genSpikeListTypeSize,  MPI_FTYPE, tInfo->typeProcess[type], MPI_COMM_WORLD);
+//			MPI_Bcast (sharedData->synData->nGeneratedSpikesHost[type], tInfo->nNeurons[type], MPI_UCOMP, tInfo->typeProcess[type], MPI_COMM_WORLD);
+//		}
+//		bench.mpiSpikeTransferEnd = gettimeInMilli();
+//	}
+//	// Synchronizes the thread to wait for the communication
+//	syncCpuThreads();
+//}
 #endif
 
 #ifdef MPI_GPU_NN
@@ -249,6 +331,20 @@ void PerformSimulation::prepareMpiGeneratedSpikeStructures() {
 			}
 		}
 	}
+
+	/**
+	 * The structures below are used in the MPI communication phase as a temporary store
+	 * to reduce the amount of transfered data
+	 */
+#ifdef MPI_GPU_NN
+	sharedData->nSpikesMpiComm      = (int32_t *) malloc(tInfo->totalTypes * sizeof(int32_t));
+	sharedData->spikeTimesMpiComm   = (ftype **)  malloc(tInfo->totalTypes * sizeof(ftype *));
+	sharedData->neuronSpikeMpiComm  = (int32_t **)malloc(tInfo->totalTypes * sizeof(int32_t *));;
+	for (int type = 0; type < tInfo->totalTypes; type++) {
+		sharedData->spikeTimesMpiComm[type]  = (ftype *)  malloc(GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type] * sizeof(ftype)  );
+		sharedData->neuronSpikeMpiComm[type] = (int32_t *)malloc(GENSPIKETIMELIST_SIZE * tInfo->nNeurons[type] * sizeof(int32_t));
+	}
+#endif
 }
 #endif
 
@@ -348,8 +444,14 @@ int PerformSimulation::launchExecution() {
 
     createNeurons(sharedData->dt);
 
-	printf("process = %d | threadNumber = %d | types [%d|%d] | seed=%d \n",
-			tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread, tInfo->sharedData->globalSeed);
+
+
+
+    char hostname[50];
+    gethostname(hostname, 50);
+
+	printf("process = %d | threadNumber = %d | types [%d|%d] | seed=%d | hostname=%s\n" ,
+			tInfo->currProcess, tInfo->threadNumber, tInfo->startTypeThread, tInfo->endTypeThread-1, tInfo->sharedData->globalSeed, hostname);
 
     int *nNeurons = tInfo->nNeurons;
     int startTypeThread = tInfo->startTypeThread;
@@ -393,6 +495,7 @@ int PerformSimulation::launchExecution() {
         bench.totalConnRead = 0;
         bench.totalConnWait = 0;
         bench.totalConnWrite = 0;
+        bench.totalMpiSpikeTransfer = 0;
     }
 
 	//if (benchConf.checkCommMode() == NN_CPU) TODO: should be created only for CPU execution?

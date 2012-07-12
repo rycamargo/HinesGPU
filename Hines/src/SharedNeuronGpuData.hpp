@@ -45,7 +45,11 @@ struct SharedNeuronGpuData {
 
 	unsigned int globalSeed;
 
-
+#ifdef MPI_GPU_NN
+    int32_t  *nSpikesMpiComm;
+	ftype   **spikeTimesMpiComm;
+	int32_t **neuronSpikeMpiComm;
+#endif
 };
 
 #endif

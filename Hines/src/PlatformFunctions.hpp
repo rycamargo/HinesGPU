@@ -130,11 +130,15 @@ struct BenchTimes {
 	uint64 connRead;
 	uint64 connWait;
 	uint64 connWrite;
+	uint64 mpiSpikeTransferStart;
+	uint64 mpiSpikeTransferEnd;
+
 
 	ftype totalHinesKernel;
 	ftype totalConnRead;
 	ftype totalConnWait;
 	ftype totalConnWrite;
+	ftype totalMpiSpikeTransfer;
 
 	//-----------------------------------
 	ftype meanGenSpikes;

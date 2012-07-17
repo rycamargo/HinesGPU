@@ -175,10 +175,7 @@ int Connections::connectTypeToTypeRandom( ThreadInfo *tInfo,
 	int nConnTotal = 0;
 
 	// Finds total number of destType neurons
-	int nDestTypeNeurons = 0;
-	for (int type=0; type < tInfo->totalTypes; type++)
-		if (tInfo->sharedData->typeList[type] == destType)
-			nDestTypeNeurons += tInfo->nNeurons[type];
+	int nDestTypeNeurons = tInfo->nNeuronsTotalType[destType];
 
 	random_data *randBuff = tInfo->sharedData->randBuf[tInfo->threadNumber];
 	int32_t randVal;
@@ -245,7 +242,7 @@ int Connections::connectTypeToTypeOneToOne( ThreadInfo *tInfo,
 		if (tInfo->sharedData->typeList[sType] == destType)
 			destNeuron += tInfo->nNeurons[sType];
 
-	if (tInfo->sharedData->inhConnRatio > 0) {
+	if (tInfo->sharedData->pyrInhConnRatio > 0) {
 		for (int sType=tInfo->startTypeProcess; sType < tInfo->endTypeProcess; sType++) {
 
 			if (tInfo->sharedData->typeList[sType] != sourceType) continue;
@@ -280,19 +277,19 @@ int Connections::connectRandom ( struct ThreadInfo *tInfo ) {
 	 * Connects the pyramidal-pyramidal cells
 	 */
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, PYRAMIDAL_CELL, PYRAMIDAL_CELL, 0, sharedData->pyrConnRatio,
+			tInfo, PYRAMIDAL_CELL, PYRAMIDAL_CELL, 0, sharedData->pyrPyrConnRatio,
 			sharedData->excWeight, 0.5, 10, 10);
 
 	/**
 	 * Connects the pyramidal-inhibitory cells
 	 */
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio/10,
+			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->pyrInhConnRatio/10,
 			sharedData->pyrInhWeight*4, 0.5, 10, 10);
 
 
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, PYRAMIDAL_CELL, BASKET_CELL, 0, sharedData->inhConnRatio,
+			tInfo, PYRAMIDAL_CELL, BASKET_CELL, 0, sharedData->pyrInhConnRatio,
 			sharedData->pyrInhWeight, 0.5, 10, 10);
 
 	/**
@@ -300,7 +297,7 @@ int Connections::connectRandom ( struct ThreadInfo *tInfo ) {
 	 * Each inhibitory cell connects to a single pyramidal neuron
 	 */
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhConnRatio/10,
+			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->pyrInhConnRatio/10,
 			sharedData->inhPyrWeight/20, 0.5, 10, 10);
 
 	nConnTotal += connectTypeToTypeOneToOne(
@@ -325,21 +322,21 @@ int Connections::connectRandom2 ( struct ThreadInfo *tInfo ) {
 	 * Connects the pyramidal-pyramidal cells
 	 */
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, PYRAMIDAL_CELL, PYRAMIDAL_CELL, 0, sharedData->pyrConnRatio,
+			tInfo, PYRAMIDAL_CELL, PYRAMIDAL_CELL, 0, sharedData->pyrPyrConnRatio,
 			sharedData->excWeight, 0.5, 10, 10);
 
 	/**
 	 * Connects the pyramidal-inhibitory cells
 	 */
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->inhConnRatio/10,
+			tInfo, PYRAMIDAL_CELL, INHIBITORY_CELL, 0, sharedData->pyrInhConnRatio,
 			sharedData->pyrInhWeight, 0.5, 10, 10);
 
 	/**
 	 * Connects the inhibitory-pyramidal cells
 	 */
 	nConnTotal += connectTypeToTypeRandom(
-			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhConnRatio/10,
+			tInfo, INHIBITORY_CELL, PYRAMIDAL_CELL, 1, sharedData->inhPyrConnRatio,
 			sharedData->inhPyrWeight, 0.5, 10, 10);
 
 	return 0;

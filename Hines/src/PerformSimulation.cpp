@@ -98,21 +98,47 @@ void PerformSimulation::initializeThreadInformation(){
 	initstate_r(tInfo->sharedData->globalSeed + tInfo->threadNumber + tInfo->currProcess,
 			randstate, 256, tInfo->sharedData->randBuf[tInfo->threadNumber]);
 
-	int nThreadsCpu 	= tInfo->sharedData->nThreadsCpu;
-    int nTypesPerThread = (tInfo->totalTypes / (nThreadsCpu * tInfo->nProcesses));
-    tInfo->startTypeThread = (tInfo->threadNumber + (tInfo->currProcess * nThreadsCpu)) * nTypesPerThread;
-    tInfo->endTypeThread = (tInfo->threadNumber + 1 + (tInfo->currProcess * nThreadsCpu)) * nTypesPerThread;
-    tInfo->startTypeProcess = tInfo->currProcess * nThreadsCpu * nTypesPerThread;
-    tInfo->endTypeProcess = (tInfo->currProcess + 1) * nThreadsCpu * nTypesPerThread;
+	if (tInfo->globalThreadTypes == 0) {
+		int nThreadsCpu 	= tInfo->sharedData->nThreadsCpu;
+		int nTypesPerThread = (tInfo->totalTypes / (nThreadsCpu * tInfo->nProcesses));
+		tInfo->startTypeThread = (tInfo->threadNumber + (tInfo->currProcess * nThreadsCpu)) * nTypesPerThread;
+		tInfo->endTypeThread = (tInfo->threadNumber + 1 + (tInfo->currProcess * nThreadsCpu)) * nTypesPerThread;
+		tInfo->startTypeProcess = tInfo->currProcess * nThreadsCpu * nTypesPerThread;
+		tInfo->endTypeProcess = (tInfo->currProcess + 1) * nThreadsCpu * nTypesPerThread;
 
-    int typeProcessCurr = 0;
-    tInfo->typeProcess = new int[tInfo->totalTypes];
-    for(int type = 0;type < tInfo->totalTypes;type++){
-        if(type / ((typeProcessCurr + 1) * nThreadsCpu * nTypesPerThread) == 1)
-            typeProcessCurr++;
+	    int typeProcessCurr = 0;
+	    tInfo->typeProcess = new int[tInfo->totalTypes];
+	    for(int type = 0;type < tInfo->totalTypes;type++){
+	        if(type / ((typeProcessCurr + 1) * nThreadsCpu * nTypesPerThread) == 1)
+	            typeProcessCurr++;
 
-        tInfo->typeProcess[type] = typeProcessCurr;
-    }
+	        tInfo->typeProcess[type] = typeProcessCurr;
+	    }
+
+	}
+	else {
+		int *threadTypesTmp = tInfo->globalThreadTypes;
+
+		tInfo->startTypeProcess = threadTypesTmp[tInfo->currProcess];
+		threadTypesTmp += tInfo->nProcesses;
+		tInfo->endTypeProcess   = threadTypesTmp[tInfo->currProcess];
+		threadTypesTmp += tInfo->nProcesses;
+
+		int nThreadsTotal = (tInfo->globalThreadTypesSize - 2*tInfo->nProcesses) / 2;
+		int pos = 0;
+		for(; threadTypesTmp[pos] != tInfo->startTypeProcess && pos < nThreadsTotal; pos++);
+		tInfo->startTypeThread = threadTypesTmp[pos + tInfo->threadNumber];
+		tInfo->endTypeThread   = threadTypesTmp[pos + nThreadsTotal + tInfo->threadNumber];
+
+		printf("process=%d|pos=%d|thread=%d|nthreads=%d %d|%d\n", tInfo->currProcess, pos, tInfo->threadNumber, nThreadsTotal, tInfo->startTypeThread, tInfo->endTypeThread);
+
+		int typeProcessCurr = 0;
+		tInfo->typeProcess = new int[tInfo->totalTypes];
+		for(int proc = 0; proc < tInfo->nProcesses ;proc++)
+			for(int type = tInfo->globalThreadTypes[proc]; type < tInfo->globalThreadTypes[proc + tInfo->nProcesses] ;type++)
+				tInfo->typeProcess[type] = proc;
+
+	}
 }
 
 void PerformSimulation::updateBenchmark()
@@ -367,7 +393,7 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 {
 
 	ftype currTime    = sharedData->dt * (tInfo->kStep + kernelInfo->nKernelSteps);
-	ftype randWeight  = 1;
+	ftype randWeight  = sharedData->randWeight;
 	ucomp randSynapse = 0;
 
 	randomSpkInfo.listSize =
@@ -380,40 +406,40 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 	ftype dt = sharedData->dt;
 
 	randomSpkInfo.nRandom = 0;
-    for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
-				HinesMatrix & m = sharedData->matrixList[type][neuron];
+	for (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {
+		HinesMatrix & m = sharedData->matrixList[type][neuron];
 
-				if ((tInfo->kStep + kernelSteps)*m.dt > 9.9999 && sharedData->typeList[type] == PYRAMIDAL_CELL) {
-					int32_t randValue;
-					random_r(sharedData->randBuf[tInfo->threadNumber], &randValue);
-					ftype rate = (sharedData->inputSpikeRate) * (kernelSteps * dt);
-					ftype kPos = (ftype)randValue/RAND_MAX;
-					if ( kPos < rate ) {
-						ftype spkTime = currTime + (int)( kPos * kernelSteps ) * dt;
+		if ((tInfo->kStep + kernelSteps)*m.dt > 9.9999 ){ //&& sharedData->typeList[type] == PYRAMIDAL_CELL) {
+			int32_t randValue;
+			random_r(sharedData->randBuf[tInfo->threadNumber], &randValue);
+			ftype rate = (sharedData->inputSpikeRate) * (kernelSteps * dt);
+			ftype kPos = (ftype)randValue/RAND_MAX;
+			if ( kPos < rate ) {
+				ftype spkTime = currTime + (int)( kPos * kernelSteps ) * dt;
 
-						if (benchConf.checkCommMode(NN_GPU) ) {
-							assert(randomSpkInfo.nRandom < randomSpkInfo.listSize);
-							randomSpkInfo.spikeTimes[randomSpkInfo.nRandom] = spkTime;
-							randomSpkInfo.spikeDest[randomSpkInfo.nRandom] = neuron;
-						}
-						randomSpkInfo.nRandom++;
-						if (benchConf.checkCommMode(NN_CPU) ) {
-
-							if (benchConf.checkProcMode(NN_CPU) )
-								m.synapticChannels->addToSynapticActivationList(currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
-
-							else if (benchConf.checkProcMode(NN_GPU) )
-								GpuSimulationControl::addToInterleavedSynapticActivationList(
-										sharedData->synData->activationListGlobal[type],
-										sharedData->synData->activationListPosGlobal[type] + neuron * m.synapticChannels->synapseListSize,
-										m.synapticChannels->activationListSize,
-										neuron, tInfo->nNeurons[type], currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
-
-						}
-
-					}
+				if (benchConf.checkCommMode(NN_GPU) ) {
+					assert(randomSpkInfo.nRandom < randomSpkInfo.listSize);
+					randomSpkInfo.spikeTimes[randomSpkInfo.nRandom] = spkTime;
+					randomSpkInfo.spikeDest[randomSpkInfo.nRandom] = neuron;
 				}
+				randomSpkInfo.nRandom++;
+				if (benchConf.checkCommMode(NN_CPU) ) {
+
+					if (benchConf.checkProcMode(NN_CPU) )
+						m.synapticChannels->addToSynapticActivationList(currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
+
+					else if (benchConf.checkProcMode(NN_GPU) )
+						GpuSimulationControl::addToInterleavedSynapticActivationList(
+								sharedData->synData->activationListGlobal[type],
+								sharedData->synData->activationListPosGlobal[type] + neuron * m.synapticChannels->synapseListSize,
+								m.synapticChannels->activationListSize,
+								neuron, tInfo->nNeurons[type], currTime, sharedData->dt, randSynapse, spkTime, 0, randWeight);
+
+				}
+
 			}
+		}
+	}
 }
 
 
@@ -628,6 +654,7 @@ int PerformSimulation::launchExecution() {
 #ifdef MPI_GPU_NN
 		broadcastGeneratedSpikesMPISync();
 #endif
+
 		if(threadNumber == 0)
 			bench.connWait = gettimeInMilli();
 

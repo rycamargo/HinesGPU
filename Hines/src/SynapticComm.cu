@@ -228,9 +228,8 @@ __device__ void updateActivationListPos (
  * TODO: change ConnGpu connGpuDev to reference
  */
 __device__ void updateActivationList( HinesStruct *hList,
-		int nNeurons, ConnGpu *connGpuListDev,
-		ftype **genSpikeTimeListDev, ucomp **nGeneratedSpikesDev,
-		ftype *randomSpikeTimesDev,  int *randomSpikeDestDev, int nRandom, ftype *freeMem) {
+		int nNeurons, ConnGpu *connGpuListDev, ftype **genSpikeTimeListDev, ucomp **nGeneratedSpikesDev,
+		ftype *randomSpikeTimesDev,  int *randomSpikeDestDev, int nRandom, ftype randWeight, ftype *freeMem) {
 
 	ConnGpu connGpuDev = connGpuListDev[blockIdx.x];
 
@@ -304,7 +303,7 @@ __device__ void updateActivationList( HinesStruct *hList,
 			int activationListPosSyn = activationListPos[ nSynapses * (destNeuron-nNeuronsPrev) + 0 ];
 			// synapse=0, delay=0, weight = 1
 			updateActivationListPos( activationList, activationListPosSyn, activationListSize, cStep,
-					currTime, dt, 0, randomSpikeTimesDev[iRnd+threadIdx.x], 0, 1, destNeuron, nNeurons, freeMem );
+					currTime, dt, 0, randomSpikeTimesDev[iRnd+threadIdx.x], 0, randWeight, destNeuron, nNeurons, freeMem );
 
 		}
 		iRnd += blockDim.x;
@@ -315,8 +314,8 @@ __device__ void updateActivationList( HinesStruct *hList,
 
 
 __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
-		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev,
-		HinesStruct *hList, ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom) {
+		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev, HinesStruct *hList,
+		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom, ftype randWeight) {
 
 	extern __shared__ ftype sharedMem[];
 	ftype *freeMem =sharedMem;
@@ -327,6 +326,6 @@ __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 //	int neuron = connGpuDev.nNeuronsInPreviousGroups + threadIdx.x;
 
 	updateActivationList( hList, nNeurons, connGpuListDev, genSpikeTimeListDev, nGeneratedSpikesDev,
-			randomSpikeTimesDev, randomSpikeDestDev, nRandom, freeMem);
+			randomSpikeTimesDev, randomSpikeDestDev, nRandom, randWeight, freeMem);
 }
 

@@ -32,7 +32,7 @@ extern int **countReceivedSpikesCpu(ConnGpu *connGpuList, int nNeurons, int nGro
 
 extern __global__ void performCommunicationsG(int nNeurons, ConnGpu *connGpuListDev,
 		ucomp **nGeneratedSpikesDev, ftype **genSpikeTimeListDev, HinesStruct *hList,
-		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom);
+		ftype *randomSpikeTimesDev, int *randomSpikeDestDev, int nRandom, ftype randWeight);
 
 void checkCUDAError(const char *msg)
 {
@@ -460,7 +460,7 @@ void GpuSimulationControl::performGPUCommunications(int type, struct RandomSpike
 	performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(
 			tInfo->nNeurons[type], sharedData->connGpuListDevice[type],
 			synData->nGeneratedSpikesGpusDev[threadNumber], synData->genSpikeTimeListGpusDev[threadNumber],
-			sharedData->hGpu[type], randomSpikeTimesDev, randomSpikeDestDev, randomSpkInfo.nRandom);
+			sharedData->hGpu[type], randomSpikeTimesDev, randomSpikeDestDev, randomSpkInfo.nRandom, sharedData->randWeight);
 
 	/**
 	 * TODO: Remove Me [MPI]
@@ -715,9 +715,6 @@ void GpuSimulationControl::addToInterleavedSynapticActivationList(
 	// TODO: race conditions can occur here with multiple threads
 	activationList[    pos * nNeurons + neuron] += (weight / dt) * ( 1 - diff );
 	activationList[nextPos * nNeurons + neuron] += (weight / dt) * diff;
-
-//	activationList[    pos * nNeurons + neuron] = (weight / dt) * ( 1 - diff );
-//	activationList[nextPos * nNeurons + neuron] = (weight / dt) * diff;
 
 	//pthread_mutex_unlock (&addSpikeMutex);
 }

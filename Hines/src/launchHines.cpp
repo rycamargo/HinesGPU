@@ -41,6 +41,7 @@
 #include <cstdlib>
 #include <ctime>
 #include <pthread.h>
+#include <unistd.h>
 
 #include "SharedNeuronGpuData.hpp"
 #include "KernelInfo.hpp"
@@ -104,12 +105,12 @@ ThreadInfo *createInfoArray(int nThreads, ThreadInfo *model){
 	ThreadInfo *tInfoArray = new ThreadInfo[nThreads];
 	for (int i=0; i<nThreads; i++) {
 		tInfoArray[i].sharedData 	= model->sharedData;
-		tInfoArray[i].nNeurons		= model->nNeurons;
 		tInfoArray[i].nComp			= model->nComp;
+		tInfoArray[i].nNeurons		= model->nNeurons;
+		tInfoArray[i].nNeuronsTotalType = model->nNeuronsTotalType;
 
 		tInfoArray[i].nTypes		= model->nTypes;
-		tInfoArray[i].totalTypes		= model->totalTypes;
-		tInfoArray[i].totalTypesProcess	= model->totalTypesProcess;
+		tInfoArray[i].totalTypes	= model->totalTypes;
 
 		tInfoArray[i].currProcess	= model->currProcess;
 
@@ -118,45 +119,242 @@ ThreadInfo *createInfoArray(int nThreads, ThreadInfo *model){
 		tInfoArray[i].startTypeThread	= model->startTypeThread;
 		tInfoArray[i].endTypeThread		= model->endTypeThread;
 		tInfoArray[i].threadNumber		= model->threadNumber;
+
+		tInfoArray[i].globalThreadTypes     = model->globalThreadTypes;
+		tInfoArray[i].globalThreadTypesSize = model->globalThreadTypesSize;
+
 	}
 
 	return tInfoArray;
 }
 
-void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, char & mode)
-{
+void configureNeuronTypes(char*& simType, ThreadInfo*& tInfo, int& nNeurons,  char *configFileName) {
 
-	int nComp = 4;
+	if (simType[0] != 'c') {
+		int nComp = 4;
 
-	tInfo->nTypes = 3;
-	tInfo->totalTypesProcess = tInfo->nTypes * tInfo->sharedData->nThreadsCpu;
-	tInfo->totalTypes = tInfo->totalTypesProcess * tInfo->nProcesses;
+		tInfo->nTypes = 3;
+		tInfo->totalTypes = tInfo->nTypes * tInfo->sharedData->nThreadsCpu * tInfo->nProcesses;
 
-	tInfo->nNeurons = new int[tInfo->totalTypes];
-	tInfo->nComp    = new int[tInfo->totalTypes];
-	tInfo->sharedData->typeList = new int[tInfo->totalTypes];
+		tInfo->nNeurons = new int[tInfo->totalTypes];
+		tInfo->nComp = new int[tInfo->totalTypes];
+		tInfo->sharedData->typeList = new int[tInfo->totalTypes];
+		tInfo->nNeuronsTotalType = new int[tInfo->nTypes];
+		for (int type=0; type < tInfo->nTypes; type++)
+			tInfo->nNeuronsTotalType[ type ] = 0;
 
-	tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypes];
-	for (int i=0; i<tInfo->totalTypes; i += tInfo->nTypes) {
-		tInfo->nNeurons[i] = nNeurons/(tInfo->totalTypes);
-		tInfo->nComp[i]    = nComp;
-		tInfo->sharedData->typeList[i] = PYRAMIDAL_CELL;
+		tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypes];
+		for (int i = 0; i < tInfo->totalTypes; i += tInfo->nTypes) {
+			tInfo->nNeurons[i] = nNeurons / (tInfo->totalTypes);
+			tInfo->nComp[i] = nComp;
+			tInfo->sharedData->typeList[i] = PYRAMIDAL_CELL;
+			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i] ] += tInfo->nNeurons[i];
 
-		tInfo->nNeurons[i+1] = nNeurons/(tInfo->totalTypes);
-		tInfo->nComp[i+1]    = nComp;
-		tInfo->sharedData->typeList[i+1] = INHIBITORY_CELL;
+			tInfo->nNeurons[i + 1] = nNeurons / (tInfo->totalTypes);
+			tInfo->nComp[i + 1] = nComp;
+			tInfo->sharedData->typeList[i + 1] = INHIBITORY_CELL;
+			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i] ] += tInfo->nNeurons[i];
 
-		tInfo->nNeurons[i+2] = nNeurons/(tInfo->totalTypes);
-		tInfo->nComp[i+2]    = nComp;
-		tInfo->sharedData->typeList[i+2] = BASKET_CELL;
+			tInfo->nNeurons[i + 2] = nNeurons / (tInfo->totalTypes);
+			tInfo->nComp[i + 2] = nComp;
+			tInfo->sharedData->typeList[i + 2] = BASKET_CELL;
+			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i] ] += tInfo->nNeurons[i];
+
+		}
+	}
+	else {
+
+		int nComp = 4;
+
+		char str[200];
+		char *strTmp = str;
+
+		FILE *fp = fopen(configFileName,"r");
+		if(!fp) { // exits if file not found
+			printf("launchHines.cpp: Network configuration file does not exist.\n");
+			exit(-1);
+		}
+
+
+
+		tInfo->totalTypes = 0;
+
+		int maxPr = 20;
+		int maxTh = 10;
+		int maxTy = 10;
+
+		int nProcessesGlobal = 0;
+		int nThreadsTotal = 0;
+		int nThreadsGlobal[maxPr];
+
+
+		int startTypeProcessGlobal[maxPr];
+		int   endTypeProcessGlobal[maxPr];
+		int iProcess = -1;
+
+		int startTypeThreadGlobal[maxPr * maxTh];
+		int   endTypeThreadGlobal[maxPr * maxTh];
+		int iThread = -1;
+
+		int nNeuronsTypeTotal[maxTy];
+		int nNeuronsGlobal[maxPr * maxTh];
+		int typeListGlobal[maxPr * maxTh];
+
+		int hostFound = 0;
+
+
+		while(fgets(str,sizeof(str),fp) != NULL)
+		{
+			int len = strlen(str)-1; // strips '\n'
+			if (str[len] == '\n') str[len] = 0;
+			if (len == 0 || str[0] == '#' ) continue; // skip comment lines
+
+			if (str[0] == 't' ) {
+				strTmp = strchr(str,':') + 1; // removes leading identifier
+				sscanf(strTmp, "%d", &(tInfo->nTypes));
+				assert(tInfo->nTypes <= 10);
+
+				for (int t=0; t < tInfo->nTypes; t++) {
+					strTmp = strchr(strTmp,':') + 1;
+					sscanf(strTmp, "%d", &nNeuronsTypeTotal[t]);
+				}
+			}
+
+			if (str[0] == 'm' ) {
+				iProcess++;	iThread=-1;
+
+				strTmp = strchr(str,':') + 1; // removes leading identifier
+
+				// Get the machine name
+				char hostconfig[50];
+				sscanf(strTmp, "%s", hostconfig);
+				strchr(hostconfig,':')[0] = 0;
+			    char hostname[50];
+			    gethostname(hostname, 50);
+
+			    printf("%s %s\n", hostconfig, hostname);
+
+				strTmp = strchr(strTmp,':') + 1;
+				int nThreadsTmp;
+				sscanf(strTmp, "%d", &nThreadsTmp);
+
+				nThreadsGlobal[iProcess] = nThreadsTmp;
+				nProcessesGlobal++;
+				nThreadsTotal += nThreadsTmp;
+
+				startTypeProcessGlobal[iProcess] = tInfo->totalTypes;
+				endTypeProcessGlobal[iProcess]   = tInfo->totalTypes;
+
+			    if (strcmp(hostconfig, hostname) == 0) {
+			    	tInfo->sharedData->nThreadsCpu = nThreadsTmp;
+			    	hostFound++;
+			    }
+
+			}
+
+			if (str[0] == 'n' ) {
+				iThread++;
+				strTmp = str;
+
+				startTypeThreadGlobal[iProcess * maxTh + iThread] = tInfo->totalTypes;
+				ftype rateNeuronsType = 0;
+				for (int t=0; t < tInfo->nTypes; t++) {
+					strTmp = strchr(strTmp,':') + 1;
+					sscanf(strTmp, "%f", &rateNeuronsType);
+
+					if (rateNeuronsType > 0) {
+						nNeuronsGlobal[ tInfo->totalTypes ] = nNeuronsTypeTotal[t] * rateNeuronsType;
+						typeListGlobal[ tInfo->totalTypes ] = t;
+						tInfo->totalTypes++;
+					}
+				}
+				endTypeThreadGlobal[iProcess * maxTh + iThread] = tInfo->totalTypes;
+				endTypeProcessGlobal[iProcess] = tInfo->totalTypes;
+			}
+
+
+
+		}
+
+		assert (tInfo->nProcesses == nProcessesGlobal);
+
+		tInfo->globalThreadTypesSize = 2 * tInfo->nProcesses + 2 * nThreadsTotal;
+		tInfo->globalThreadTypes = new int[tInfo->globalThreadTypesSize];
+
+		int offset = 0;
+		int t = 0;
+		for (t=0; t < tInfo->nProcesses; t++)
+			tInfo->globalThreadTypes[offset + t] = startTypeProcessGlobal[t];
+		offset += tInfo->nProcesses;
+		for (t=0; t < tInfo->nProcesses; t++)
+			tInfo->globalThreadTypes[offset + t] = endTypeProcessGlobal[t];
+		offset += tInfo->nProcesses;
+		for (int p=0, t=0; p < tInfo->nProcesses; p++)
+			for (int pt=0; pt < nThreadsGlobal[p]; pt++, t++)
+				tInfo->globalThreadTypes[offset + t] = startTypeThreadGlobal[p * maxTh + pt];
+		offset += nThreadsTotal;
+		for (int p=0, t=0; p < tInfo->nProcesses; p++)
+			for (int pt=0; pt < nThreadsGlobal[p]; pt++, t++)
+				tInfo->globalThreadTypes[offset + t] = endTypeThreadGlobal[p * maxTh + pt];
+
+		assert(hostFound == 1);
+		for (t=0; t < tInfo->nProcesses; t++)
+			assert(startTypeProcessGlobal[t] != endTypeProcessGlobal[t]);
+
+
+		tInfo->sharedData->matrixList = new HinesMatrix *[tInfo->totalTypes];
+		tInfo->nNeurons = new int[tInfo->totalTypes];
+		tInfo->nComp = new int[tInfo->totalTypes];
+		tInfo->sharedData->typeList = new int[tInfo->totalTypes];
+		for (int t=0; t < tInfo->totalTypes; t++) {
+			tInfo->nNeurons[t] = nNeuronsGlobal[t];
+			tInfo->nComp[t] = nComp;
+			tInfo->sharedData->typeList[t] = typeListGlobal[t];
+		}
+
+		tInfo->nNeuronsTotalType = new int[tInfo->nTypes];
+		for (int type=0; type < tInfo->nTypes; type++)
+			tInfo->nNeuronsTotalType[ type ] = 0;
+		for (int type=0; type < tInfo->totalTypes; type++)
+			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[type] ] += tInfo->nNeurons[type];
+
+		//*****************************************************
+		printf("nTypes=%d totalTypes=%d nProcesses=%d\n", tInfo->nTypes, tInfo->totalTypes, tInfo->nProcesses);
+		for (int t=0; t < tInfo->totalTypes; t++)
+			printf( "%d|%d ", nNeuronsGlobal[t], typeListGlobal[t]);
+		printf( "\n");
+		for (int t=0; t < tInfo->globalThreadTypesSize; t++)
+			printf( "%d ", tInfo->globalThreadTypes[t]);
+		printf( "\n");
+		//*****************************************************
+
+		// Check if the total number of neurons is correct
+		for (int type=0; type < tInfo->nTypes; type++)
+			assert(tInfo->nNeuronsTotalType[type] == nNeuronsTypeTotal[type]);
+
+
+		// TODO: Implement the profiler
+
+		fclose(fp);
+
+		//exit(0);
 
 	}
+}
+
+void configureSimulation(char *simType, ThreadInfo *& tInfo, int nNeurons, char mode, char *configFile)
+{
+
+	// Configure the types and number of neurons
+	configureNeuronTypes(simType, tInfo, nNeurons, configFile);
 
 	// defines some default values
 	tInfo->sharedData->inputSpikeRate = 0.1;
-	tInfo->sharedData->pyrConnRatio   = 0.1;
-	tInfo->sharedData->inhConnRatio   = 0.1;
+	tInfo->sharedData->pyrPyrConnRatio   = 0.1;
+	tInfo->sharedData->pyrInhConnRatio   = 0.1;
 	tInfo->sharedData->totalTime   = 100; // in ms
+
+	tInfo->sharedData->randWeight = 1;
 
     if (simType[0] == 'p') {
 		  printf ("Simulation configured as: Running performance experiments.\n");
@@ -166,21 +364,21 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 
 			tInfo->sharedData->totalTime   = 100; // 10s
 			tInfo->sharedData->inputSpikeRate = 0.01;
-			tInfo->sharedData->pyrConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-			tInfo->sharedData->inhConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+			tInfo->sharedData->pyrPyrConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+			tInfo->sharedData->pyrInhConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
 
 			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05
 			tInfo->sharedData->pyrInhWeight = 0.1; //1.0/(nPyramidal/100.0);
 			tInfo->sharedData->inhPyrWeight = 1;
 
 			if (simType[1] == '0') { // No
-				tInfo->sharedData->pyrConnRatio   = 0;
-				tInfo->sharedData->inhConnRatio   = 0;
+				tInfo->sharedData->pyrPyrConnRatio   = 0;
+				tInfo->sharedData->pyrInhConnRatio   = 0;
 				tInfo->sharedData->inputSpikeRate = -1;
 			}
 			if (simType[1] == '1') {
-				tInfo->sharedData->pyrConnRatio   = 0;
-				tInfo->sharedData->inhConnRatio   = 0;
+				tInfo->sharedData->pyrPyrConnRatio   = 0;
+				tInfo->sharedData->pyrInhConnRatio   = 0;
 				tInfo->sharedData->inputSpikeRate = 0.01; // 1 spike each 10 ms
 			}
 
@@ -207,15 +405,15 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 			tInfo->sharedData->inhPyrWeight = 1;
 
 			if (simType[1] == '1') {
-				tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrPyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrInhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
 				tInfo->sharedData->excWeight    = 0.030;
 				tInfo->sharedData->pyrInhWeight = 0.035;
 				tInfo->sharedData->inhPyrWeight = 10;
 			}
 			else if (simType[1] == '0') {
-				tInfo->sharedData->pyrConnRatio   = 0; // nPyramidal
-				tInfo->sharedData->inhConnRatio   = 0; // nPyramidal
+				tInfo->sharedData->pyrPyrConnRatio   = 0; // nPyramidal
+				tInfo->sharedData->pyrInhConnRatio   = 0; // nPyramidal
 			}
 		}
 
@@ -244,13 +442,13 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 			tInfo->sharedData->inhPyrWeight = 1;
 
 			if (simType[1] == '0') { // 200k: 0.79
-				tInfo->sharedData->pyrConnRatio   = 0; // nPyramidal
-				tInfo->sharedData->inhConnRatio   = 0; // nPyramidal
+				tInfo->sharedData->pyrPyrConnRatio   = 0; // nPyramidal
+				tInfo->sharedData->pyrInhConnRatio   = 0; // nPyramidal
 				tInfo->sharedData->inputSpikeRate = 0.02; // increases the input
 			}
 			else if (simType[1] == '1') {
-				tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
-				tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
+				tInfo->sharedData->pyrPyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
+				tInfo->sharedData->pyrInhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
 
 				if (simType[2] == 'l') { // 200k: 0.92
 					tInfo->sharedData->excWeight    = 0.030;
@@ -269,8 +467,8 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 				}
 			}
 			else if (simType[1] == '2') {
-				tInfo->sharedData->pyrConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->inhConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrPyrConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrInhConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
 
 				if (simType[2] == 'l') { // 100k: 1.19
 					tInfo->sharedData->excWeight    = 0.004;
@@ -296,8 +494,8 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 				else if (simType[1] == '4')
 					totalConn = 10 * 1000 * 1000;
 				ftype connPerNeuron = totalConn / nNeurons;
-				tInfo->sharedData->pyrConnRatio   = connPerNeuron / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->inhConnRatio   = connPerNeuron / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrPyrConnRatio   = connPerNeuron / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrInhConnRatio   = connPerNeuron / (nNeurons/tInfo->nTypes); // nPyramidal
 
 				if (simType[2] == 'l') {
 					tInfo->sharedData->excWeight    = 4.0/connPerNeuron;
@@ -305,17 +503,6 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 					tInfo->sharedData->inhPyrWeight = 10;
 				}
 			}
-
-
-
-//			if (simType[3] != 0) {
-//				int batch[] = { 0, 100, 75, 50, 25, 10, 5, 1};
-//				char *posChar = new char[1];
-//				posChar[0] = simType[3];
-//				int pos = atoi(posChar);
-//				nKernelSteps = batch[pos];
-//				delete[] posChar;
-//			}
 
 		}
 
@@ -345,34 +532,35 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int & nNeurons, cha
 
 
 			if (simType[1] == '1') {
-				tInfo->sharedData->pyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
-				tInfo->sharedData->inhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal //100
+				tInfo->sharedData->pyrPyrConnRatio   =  90.0 / tInfo->nNeuronsTotalType[PYRAMIDAL_CELL];
+				tInfo->sharedData->pyrInhConnRatio   =  10.0 / tInfo->nNeuronsTotalType[INHIBITORY_CELL];
+				tInfo->sharedData->inhPyrConnRatio   = 100.0 / tInfo->nNeuronsTotalType[PYRAMIDAL_CELL];
 
-				if (simType[2] == 'l') { // 200k: 0.92
-					tInfo->sharedData->excWeight    = 0.020; // 0.030;
-					tInfo->sharedData->pyrInhWeight = 0.100; // 0.035;
-					tInfo->sharedData->inhPyrWeight = 0.100; // 10;
-				}
-				if (simType[2] == 'h') { // 10Hz
-					tInfo->sharedData->excWeight    = 0.020; // 0.100;
-					tInfo->sharedData->pyrInhWeight = 0.000; // 0.030;
-					tInfo->sharedData->inhPyrWeight = 0.100; // 1;
-				}
+				tInfo->sharedData->randWeight   = 1.000;
+				tInfo->sharedData->excWeight    = 0.010;
+				tInfo->sharedData->pyrInhWeight = 0.020;
+				tInfo->sharedData->inhPyrWeight = 0.100;
+
+				if (simType[2] == 'l')
+					tInfo->sharedData->inputSpikeRate = 0.0025;
+				if (simType[2] == 'h')
+					tInfo->sharedData->inputSpikeRate = 0.0100;
+
 			}
 			else if (simType[1] == '2') {
-				tInfo->sharedData->pyrConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->inhConnRatio   = 1000.0 / (nNeurons/tInfo->nTypes); // nPyramidal
+				tInfo->sharedData->pyrPyrConnRatio   =  900.0 / tInfo->nNeuronsTotalType[PYRAMIDAL_CELL];
+				tInfo->sharedData->pyrInhConnRatio   =  100.0 / tInfo->nNeuronsTotalType[INHIBITORY_CELL];
+				tInfo->sharedData->inhPyrConnRatio   = 1000.0 / tInfo->nNeuronsTotalType[PYRAMIDAL_CELL];
 
-				if (simType[2] == 'l') { // 100k: 1.19
-					tInfo->sharedData->excWeight    = 0.004; // 0.004;
-					tInfo->sharedData->pyrInhWeight = 0.004; // 0.004;
-					tInfo->sharedData->inhPyrWeight = 1.000; // 10;
-				}
-				if (simType[2] == 'h') { // 10k: 5.26
-					tInfo->sharedData->excWeight    = 0.008; // 0.008;
-					tInfo->sharedData->pyrInhWeight = 0.004; // 0.004;
-					tInfo->sharedData->inhPyrWeight = 1.000; // 1;
-				}
+				tInfo->sharedData->randWeight   = 1.000; // 0.004;
+				tInfo->sharedData->excWeight    = 0.004; // 0.004;
+				tInfo->sharedData->pyrInhWeight = 0.002; // 0.004;
+				tInfo->sharedData->inhPyrWeight = 0.010; // 0.010;
+
+				if (simType[2] == 'l')
+					tInfo->sharedData->inputSpikeRate = 0.0025;
+				if (simType[2] == 'h')
+					tInfo->sharedData->inputSpikeRate = 0.0100;
 			}
 		}
 }
@@ -400,29 +588,13 @@ int main(int argc, char **argv) {
 
 	bench.start = gettimeInMilli();
 
-	if (argc < 6 ) {
-		printf("Invalid arguments!\n Usage: %s <mode> <nNeurons> <nComp> <nThreads> <simConf> [seed]\n", argv[0]);
-		exit(-1);
-	}
-
-	char mode = argv[1][0];
-	assert (mode == 'C' || mode == 'G' || mode == 'H' || mode == 'B' || mode == 'T');
-	int nNeurons = atoi(argv[2]);
-	assert ( 0 < nNeurons && nNeurons < 4096*4096);
-	int nComp = atoi(argv[3]);
-	assert ( -4096*4096 < nComp && nComp < 4096*4096);
-	int nThreads = atoi(argv[4]);
-	assert ( 0 < nThreads && nThreads < 32);
-
-	//int nKernelSteps = 100;
 	ThreadInfo *tInfo = new ThreadInfo;
 	tInfo->sharedData = new SharedNeuronGpuData;
     tInfo->sharedData->kernelInfo = new KernelInfo;
-	//tInfo->sharedData->kernelInfo->nKernelSteps = nKernelSteps;
 
 	tInfo->currProcess = currentProcess;
 	tInfo->nProcesses 	= nProcesses;
-	tInfo->sharedData->nThreadsCpu = nThreads;
+	tInfo->globalThreadTypes = 0;
 
 	tInfo->sharedData->nBarrier = 0;
 	tInfo->sharedData->mutex = new pthread_mutex_t;
@@ -433,8 +605,7 @@ int main(int argc, char **argv) {
 	tInfo->sharedData->synData = 0;
 	tInfo->sharedData->hGpu = 0;
 	tInfo->sharedData->hList = 0;
-
-	tInfo->sharedData->randBuf = new random_data *[nThreads];
+	tInfo->sharedData->globalSeed = time(NULL);
 
 	benchConf.assertResultsAll = 1; // TODO: was 1
 	benchConf.printSampleVms = 0;
@@ -442,17 +613,52 @@ int main(int argc, char **argv) {
 	benchConf.printAllSpikeTimes = 1;
 	benchConf.verbose = 0;
 
-	tInfo->sharedData->globalSeed = time(NULL);
-	if (argc > 6)
-	  tInfo->sharedData->globalSeed = atoi(argv[6])*123;
+	int nThreadsCpu = 0;
+	int nNeuronsTotal = 0;
+
+	if ( argc < 4 ) {
+		printf("Invalid arguments!\n Usage: %s <mode> <nNeurons> <nThreads> <simConf> [seed]\n", argv[0]);
+		printf("Invalid arguments!\n Usage: %s <mode> <simConf> <confFile> [seed]\n", argv[0]);
+		exit(-1);
+	}
+
+	char mode = argv[1][0];
+	assert (mode == 'C' || mode == 'G' || mode == 'H' || mode == 'B' || mode == 'T');
+
+    char *simType = argv[2];
+    if (simType[0] == 'c') {
+    	char *configFile = argv[3];
+
+    	configureSimulation(simType, tInfo, 0, mode, configFile);
+    	nThreadsCpu = tInfo->sharedData->nThreadsCpu; // This value can be changed inside configureSimulation
+    	for (int i=0; i<tInfo->totalTypes; i++)
+    		nNeuronsTotal += tInfo->nNeurons[i];
+
+    	if (argc > 4)
+    		tInfo->sharedData->globalSeed = atoi(argv[4])*123;
+    }
+    else {
+
+    	nNeuronsTotal = atoi(argv[3]);
+    	assert ( 0 < nNeuronsTotal && nNeuronsTotal < 4096*4096);
+
+    	nThreadsCpu = atoi(argv[4]);
+    	assert ( 0 < nThreadsCpu && nThreadsCpu < 32);
+    	tInfo->sharedData->nThreadsCpu = nThreadsCpu;
+
+    	configureSimulation(simType, tInfo, nNeuronsTotal, mode, 0);
+
+    	if (argc > 5)
+    	  tInfo->sharedData->globalSeed = atoi(argv[5])*123;
+    }
+
 
 	// Configure the simulationSteps
-    char *simType = argv[5];
-	configureSimulation(simType, tInfo, nNeurons, mode);
+	tInfo->sharedData->randBuf = new random_data *[nThreadsCpu];
 
-	pthread_t *thread1 = new pthread_t[nThreads];
-	ThreadInfo *tInfoArray = createInfoArray(nThreads, tInfo);
-	for (int t=0; t<nThreads; t++) {
+	pthread_t *thread1 = new pthread_t[nThreadsCpu];
+	ThreadInfo *tInfoArray = createInfoArray(nThreadsCpu, tInfo);
+	for (int t=0; t<nThreadsCpu; t++) {
 
 			if (mode == 'C' || mode == 'B')
 				pthread_create ( &thread1[t], NULL, launchHostExecution, &(tInfoArray[t]));
@@ -463,13 +669,14 @@ int main(int argc, char **argv) {
 			//pthread_detach(thread1[t]);
 	}
 
-	for (int t=0; t<nThreads; t++)
+	for (int t=0; t<nThreadsCpu; t++)
 		 pthread_join( thread1[t], NULL);
 
 	bench.finish = gettimeInMilli();
 	bench.finishF = (bench.finish - bench.start)/1000.; 
 
-	tInfo->sharedData->neuronInfoWriter->writeResultsToFile(mode, nNeurons, nComp, bench);
+	// TODO: The total number of neurons is wrong
+	tInfo->sharedData->neuronInfoWriter->writeResultsToFile(mode, nNeuronsTotal, tInfo->nComp[0], bench);
 	//delete tInfo->sharedData->neuronInfoWriter;
 
 	delete[] tInfo->nNeurons;

@@ -5,7 +5,7 @@
 #include "ThreadInfo.hpp"
 #include "HinesMatrix.hpp"
 #include "SharedNeuronGpuData.hpp"
-//#include "HinesStruct.hpp"
+#include "HinesStruct.hpp"
 
 #include <cuda.h>
 #include <cuda_runtime_api.h>
@@ -102,12 +102,12 @@ void NeuronInfoWriter::writeSampleVm(int kStep)
     if(benchConf.verbose == 1)
         printf("Writing Sample Vms thread=%d\n", tInfo->threadNumber);
 
-//    if (benchConf.checkProcMode(NN_GPU) ) {
-//    	for(int k = 0; k < nVmTimeSeries; k++)
-//    		if(tInfo->startTypeThread <= groupList[k] && groupList[k] < tInfo->endTypeThread)
-//    			cudaMemcpy(vmTimeSerie[k], sharedData->hList[ groupList[k] ][ neuronList[k] ].vmTimeSerie,
-//    					vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
-//    }
+    if (benchConf.checkProcMode(NN_GPU) ) {
+    	for(int k = 0; k < nVmTimeSeries; k++)
+    		if(tInfo->startTypeThread <= groupList[k] && groupList[k] < tInfo->endTypeThread)
+    			cudaMemcpy(vmTimeSerie[k], sharedData->hList[ groupList[k] ][ neuronList[k] ].vmTimeSerie,
+    					vmTimeSerieMemSize, cudaMemcpyDeviceToHost);
+    }
 
 	for(int i = kStep;i < kStep + kernelInfo->nKernelSteps; i++)
 		fprintf(outFile, "%10.2f\t%10.2f\t%10.2f\t%10.2f\t%10.2f\n", sharedData->dt * (i + 1),
@@ -120,7 +120,7 @@ void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nCom
 	printf ("Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
 	printf ("HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f mpiConnWait=%-10.3f\n",
 			bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite, bench.totalMpiSpikeTransfer);
-	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio, tInfo->sharedData->inhConnRatio);
+	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrPyrConnRatio, tInfo->sharedData->pyrInhConnRatio);
 
 	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu \
 			meanGenSpikes[T|P|I|B]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] \
@@ -128,8 +128,8 @@ void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nCom
 			mode, nNeuronsTotal, tInfo->totalTypes, nComp, sharedData->nThreadsCpu, sizeof(ftype),
 			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL],
 			bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL],
-			tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrConnRatio,
-			tInfo->sharedData->inhConnRatio, kernelInfo->nKernelSteps);
+			tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrPyrConnRatio,
+			tInfo->sharedData->pyrInhConnRatio, kernelInfo->nKernelSteps);
 	fprintf (resultFile, "Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
 	fprintf (resultFile, "HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n", bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
 	fprintf (resultFile, "#------------------------------------------------------------------------------\n");

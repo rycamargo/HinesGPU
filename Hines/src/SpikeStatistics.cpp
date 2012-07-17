@@ -134,9 +134,14 @@ void SpikeStatistics::printSpikeStatistics(const char *filename, ftype currentTi
 		bench.meanRecSpikesType[neuronType] /= totalNeuronsType[neuronType];
 	}
 
-	printf("meanGenSpikes[T|P|I|B]=[%3.2f|%3.2f|%3.2f|%3.2f]\nmeanRecSpikes[T|P|I|B]=[%5.2f|%5.2f|%5.2f|%5.2f]\n",
-			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL],
-			bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL]);
+	if (nNeuronTypes == 3)
+		printf("meanGenSpikes[T|P|I|B]=[%3.2f|%3.2f|%3.2f|%3.2f]\nmeanRecSpikes[T|P|I|B]=[%5.2f|%5.2f|%5.2f|%5.2f]\n",
+				bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL],
+				bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL]);
+	else if (nNeuronTypes == 2)
+		printf("meanGenSpikes[T|P|I|B]=[%3.2f|%3.2f|%3.2f]\nmeanRecSpikes[T|P|I|B]=[%5.2f|%5.2f|%5.2f]\n",
+				bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL],
+				bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL]);
 
 	fclose(outFile);
 }

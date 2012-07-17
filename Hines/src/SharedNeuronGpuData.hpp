@@ -36,9 +36,12 @@ struct SharedNeuronGpuData {
 
 	int connectivityType;
 	ftype inputSpikeRate;
-	ftype pyrConnRatio;
-	ftype inhConnRatio;
+	ftype pyrPyrConnRatio;
+	ftype pyrInhConnRatio;
+	ftype inhPyrConnRatio;
+
 	ftype excWeight;
+	ftype randWeight;
 	ftype pyrInhWeight;
 	ftype inhPyrWeight;
 

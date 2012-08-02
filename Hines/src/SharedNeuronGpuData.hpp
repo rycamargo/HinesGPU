@@ -3,6 +3,7 @@
 
 #include "Definitions.hpp"
 #include "PlatformFunctions.hpp"
+#include "KernelProfiler.hpp"
 //#include "HinesMatrix.hpp"
 //#include "SpikeStatistics.hpp"
 //#include "NeuronInfoWriter.hpp"
@@ -51,6 +52,9 @@ struct SharedNeuronGpuData {
 	ftype maxDelay; // connectionDelay
 
 	unsigned int globalSeed;
+
+	int profileKernel;
+	KernelProfiler *profiler;
 
 #ifdef MPI_GPU_NN
     int32_t  *nSpikesMpiComm;

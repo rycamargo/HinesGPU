@@ -17,15 +17,14 @@ NeuronInfoWriter::NeuronInfoWriter(ThreadInfo *tInfo) {
 	this->kernelInfo = tInfo->sharedData->kernelInfo;
 
     char buf[20];
+    sprintf(buf, "%s%d%s", "results", tInfo->currProcess, ".dat");
+    this->resultFile = fopen(buf, "a");
 
     sprintf(buf, "%s%d%s", "sampleVm", tInfo->currProcess, ".dat");
     this->outFile = fopen(buf, "w");
 
     sprintf(buf, "%s%d%s", "vmKernel", tInfo->currProcess, ".dat");
     this->vmKernelFile = fopen(buf, "w");
-
-    sprintf(buf, "%s%d%s", "results", tInfo->currProcess, ".dat");
-    this->resultFile = fopen(buf, "a");
 
     sprintf(buf, "%s%d%s", "vmKernel", tInfo->currProcess, ".dat");
     this->vmKernelFile = fopen(buf, "w");
@@ -122,16 +121,19 @@ void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nCom
 			bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite, bench.totalMpiSpikeTransfer);
 	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrPyrConnRatio, tInfo->sharedData->pyrInhConnRatio);
 
-	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu \
-			meanGenSpikes[T|P|I|B]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] \
-			inpRate=%-5.3f pyrRatio=%-5.3f inhRatio=%-5.3f nKernelSteps=%d\n",
-			mode, nNeuronsTotal, tInfo->totalTypes, nComp, sharedData->nThreadsCpu, sizeof(ftype),
-			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL],
-			bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL],
+	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu\n",
+			mode, nNeuronsTotal, tInfo->totalTypes, nComp, sharedData->nThreadsCpu, sizeof(ftype));
+	fprintf (resultFile, "meanGenSpikes[T|P|I|B]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f]\n",
+			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL]);
+	fprintf (resultFile, "meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] \n",
+			bench.meanRecSpikes, bench.meanRecSpikesType[PYRAMIDAL_CELL], bench.meanRecSpikesType[INHIBITORY_CELL], bench.meanRecSpikesType[BASKET_CELL]);
+	fprintf (resultFile, "inpRate=%-5.3f pyrRatio=%-5.3f inhRatio=%-5.3f nKernelSteps=%d\n",
 			tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrPyrConnRatio,
 			tInfo->sharedData->pyrInhConnRatio, kernelInfo->nKernelSteps);
-	fprintf (resultFile, "Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
-	fprintf (resultFile, "HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n", bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
+	fprintf (resultFile, "Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n",
+			bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
+	fprintf (resultFile, "HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f\n",
+			bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite);
 	fprintf (resultFile, "#------------------------------------------------------------------------------\n");
 
 	fclose(outFile);

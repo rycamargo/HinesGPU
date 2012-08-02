@@ -78,7 +78,7 @@ ConnGpu* createGpuConnections( ConnectionInfo *connInfo, int destType, int *nNeu
 		ConnGpu & connGpu = connGpuTypeHost[group];
 		connGpu.nConnectionsTotal = nConnectionsTotal[group];
 
-		checkCUDAError("Allocation error 0 at [SynapticComm.cfor (int neuron = 0; neuron < tInfo->nNeurons[type]; neuron++) {u]:");
+		checkCUDAError("Allocation error 0 at [SynapticComm.cu]:");
 		/**
 		 * Allocates the memory to keep the connection information in the GPU and CPU
 		 */

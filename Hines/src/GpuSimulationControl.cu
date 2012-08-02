@@ -40,6 +40,11 @@ void checkCUDAError(const char *msg)
     if( cudaSuccess != err)
     {
         fprintf(stderr, "Cuda error: %s: %s.\n", msg, cudaGetErrorString( err) );
+
+#ifdef MPI_GPU_NN
+	MPI_Abort (MPI_COMM_WORLD, -1);
+	//MPI_Finalize();
+#endif
         exit(EXIT_FAILURE);
     }
 }
@@ -456,11 +461,20 @@ void GpuSimulationControl::performGPUCommunications(int type, struct RandomSpike
 //	nReceivedSpikesHost0 = (int *)malloc(sizeof(int) * nBlocksComm[type]);
 //	nReceivedSpikesHost1 = (int *)malloc(sizeof(int) * nBlocksComm[type]);
 
+	if(sharedData->profileKernel) {
+		cudaDeviceSynchronize();
+		sharedData->profiler->setKernelStart(tInfo->threadNumber, type - tInfo->startTypeThread, 1);
+	}
 
 	performCommunicationsG <<<nBlocksComm[type], nThreadsComm[type], kernelInfo->sharedMemSizeComm>>>(
 			tInfo->nNeurons[type], sharedData->connGpuListDevice[type],
 			synData->nGeneratedSpikesGpusDev[threadNumber], synData->genSpikeTimeListGpusDev[threadNumber],
 			sharedData->hGpu[type], randomSpikeTimesDev, randomSpikeDestDev, randomSpkInfo.nRandom, sharedData->randWeight);
+
+	if(sharedData->profileKernel) {
+		cudaDeviceSynchronize();
+		sharedData->profiler->setKernelFinish(tInfo->threadNumber, type - tInfo->startTypeThread, 1);
+	}
 
 	/**
 	 * TODO: Remove Me [MPI]
@@ -508,8 +522,18 @@ void GpuSimulationControl::performGpuNeuronalProcessing() {
 		//printf("launching kernel for type %d...\n", type);
 		SynapticData *synData = sharedData->synData;
 
+		if(sharedData->profileKernel) {
+			cudaDeviceSynchronize();
+			sharedData->profiler->setKernelStart(tInfo->threadNumber, type - tInfo->startTypeThread, 0);
+		}
+
 		solveMatrixG<<<kernelInfo->nBlocksProc[type], nThreadsProc, kernelInfo->sharedMemSizeProc>>>(
 				sharedData->hGpu[type], kernelInfo->nKernelSteps, tInfo->nNeurons[type], synData->vmListDevice[type]);
+
+		if(sharedData->profileKernel) {
+			cudaDeviceSynchronize();
+			sharedData->profiler->setKernelFinish(tInfo->threadNumber, type - tInfo->startTypeThread, 0);
+		}
 
 		checkCUDAError("After SolveMatrixG Kernel:");
 	}
@@ -522,8 +546,8 @@ void GpuSimulationControl::checkVmValues()
     for (int type = tInfo->startTypeThread; type < tInfo->endTypeThread; type++)
 					for (int n = 0; n < tInfo->nNeurons[type]; n++)
 						if ( synData->vmListHost[type][n] < -500 || 500 < synData->vmListHost[type][n] || synData->vmListHost[type][n] == 0.000000000000) {
-							printf("********* type=%d neuron=%d %.2f\n", type, n, synData->vmListHost[type][n]);
-							assert(false);
+							printf("POSSIBLE ERROR: ********* type=%d neuron=%d Vm=%.2f\n", type, n, synData->vmListHost[type][n]);
+							//assert(false);
 						}
 }
 

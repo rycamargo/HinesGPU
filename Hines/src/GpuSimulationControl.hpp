@@ -5,6 +5,7 @@
 #include "SpikeStatistics.hpp"
 #include "NeuronInfoWriter.hpp"
 #include "RandomSpikeInfo.hpp"
+//#include "KernelProfiler.hpp"
 
 #include <cassert>
 #include <cstdlib>

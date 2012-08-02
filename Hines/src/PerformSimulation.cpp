@@ -139,6 +139,12 @@ void PerformSimulation::initializeThreadInformation(){
 				tInfo->typeProcess[type] = proc;
 
 	}
+
+	for(int neuronType = tInfo->startTypeThread; neuronType < tInfo->endTypeThread; neuronType++) {
+		int indexType = neuronType - tInfo->startTypeThread;
+		tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, indexType, 0, tInfo->nNeurons[neuronType]);
+		tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, indexType, 1, tInfo->nNeurons[neuronType]);
+	}
 }
 
 void PerformSimulation::updateBenchmark()
@@ -399,6 +405,10 @@ void PerformSimulation::generateRandomSpikes( int type, RandomSpikeInfo & random
 	randomSpkInfo.listSize =
 			3 * sharedData->inputSpikeRate * kernelInfo->nKernelSteps *
 			sharedData->dt * tInfo->nNeurons[type];
+	if (randomSpkInfo.listSize < 200)
+	  randomSpkInfo.listSize = 200;
+	//printf ("randomSpkInfo.listSize=%d\n",randomSpkInfo.listSize);
+
 	randomSpkInfo.spikeTimes = new ftype[ randomSpkInfo.listSize ];
 	randomSpkInfo.spikeDest = new int[ randomSpkInfo.listSize ];
 

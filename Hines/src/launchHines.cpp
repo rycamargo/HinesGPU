@@ -389,68 +389,7 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int nNeurons, char 
 
 	tInfo->sharedData->profileKernel = 0;
 
-    if (simType[0] == 'p') {
-		  printf ("Simulation configured as: Running performance experiments.\n");
-			benchConf.printSampleVms = 1; //1
-			benchConf.printAllVmKernelFinish = 1; //1
-			benchConf.printAllSpikeTimes = 1; //1
-
-			tInfo->sharedData->totalTime   = 100; // 10s
-			tInfo->sharedData->inputSpikeRate = 0.01;
-			tInfo->sharedData->pyrPyrConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-			tInfo->sharedData->pyrInhConnRatio   = 10.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-
-			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05
-			tInfo->sharedData->pyrInhWeight = 0.1; //1.0/(nPyramidal/100.0);
-			tInfo->sharedData->inhPyrWeight = 1;
-
-			if (simType[1] == '0') { // No
-				tInfo->sharedData->pyrPyrConnRatio   = 0;
-				tInfo->sharedData->pyrInhConnRatio   = 0;
-				tInfo->sharedData->inputSpikeRate = -1;
-			}
-			if (simType[1] == '1') {
-				tInfo->sharedData->pyrPyrConnRatio   = 0;
-				tInfo->sharedData->pyrInhConnRatio   = 0;
-				tInfo->sharedData->inputSpikeRate = 0.01; // 1 spike each 10 ms
-			}
-
-
-			if (simType[1] == '2') {
-				tInfo->sharedData->excWeight    = 0.030;
-				tInfo->sharedData->pyrInhWeight = 0.035;
-				tInfo->sharedData->inhPyrWeight = 10;
-				tInfo->sharedData->inputSpikeRate = 0.01;
-			}
-		}
-
-		else if (simType[0] == 's') {
-			printf ("Simulation configured as: Running nGPU experiments.\n");
-			benchConf.printSampleVms = 0;
-			benchConf.printAllVmKernelFinish = 0;
-			benchConf.printAllSpikeTimes = 0;
-
-			tInfo->sharedData->totalTime   = 100; // 1s
-			tInfo->sharedData->inputSpikeRate = 0.01;
-
-			tInfo->sharedData->excWeight = 0.01;  //1.0/(nPyramidal/100.0); 0.05
-			tInfo->sharedData->pyrInhWeight = 0.1; //1.0/(nPyramidal/100.0);
-			tInfo->sharedData->inhPyrWeight = 1;
-
-			if (simType[1] == '1') {
-				tInfo->sharedData->pyrPyrConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->pyrInhConnRatio   = 100.0 / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->excWeight    = 0.030;
-				tInfo->sharedData->pyrInhWeight = 0.035;
-				tInfo->sharedData->inhPyrWeight = 10;
-			}
-			else if (simType[1] == '0') {
-				tInfo->sharedData->pyrPyrConnRatio   = 0; // nPyramidal
-				tInfo->sharedData->pyrInhConnRatio   = 0; // nPyramidal
-			}
-		}
-
-		else if (simType[0] == 'n' || simType[0] == 'd') {
+    if (simType[0] == 'n' || simType[0] == 'd') {
 			printf ("Simulation configured as: Running scalability experiments.\n");
 
 			benchConf.printSampleVms = 1;
@@ -520,23 +459,6 @@ void configureSimulation(char *simType, ThreadInfo *& tInfo, int nNeurons, char 
 				}
 
 			}
-			else if (simType[1] == '3' || simType[1] == '4') {
-				ftype totalConn = 1000;
-				if (simType[1] == '3')
-					totalConn = 1 * 1000 * 1000;
-				else if (simType[1] == '4')
-					totalConn = 10 * 1000 * 1000;
-				ftype connPerNeuron = totalConn / nNeurons;
-				tInfo->sharedData->pyrPyrConnRatio   = connPerNeuron / (nNeurons/tInfo->nTypes); // nPyramidal
-				tInfo->sharedData->pyrInhConnRatio   = connPerNeuron / (nNeurons/tInfo->nTypes); // nPyramidal
-
-				if (simType[2] == 'l') {
-					tInfo->sharedData->excWeight    = 4.0/connPerNeuron;
-					tInfo->sharedData->pyrInhWeight = 4.0/connPerNeuron;
-					tInfo->sharedData->inhPyrWeight = 10;
-				}
-			}
-
 		}
 
 

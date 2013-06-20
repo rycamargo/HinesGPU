@@ -140,10 +140,12 @@ void PerformSimulation::initializeThreadInformation(){
 
 	}
 
-	for(int neuronType = tInfo->startTypeThread; neuronType < tInfo->endTypeThread; neuronType++) {
-		int indexType = neuronType - tInfo->startTypeThread;
-		tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, indexType, 0, tInfo->nNeurons[neuronType]);
-		tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, indexType, 1, tInfo->nNeurons[neuronType]);
+	if(tInfo->sharedData->profileKernel) {
+		for(int neuronType = tInfo->startTypeThread; neuronType < tInfo->endTypeThread; neuronType++) {
+			int indexType = neuronType - tInfo->startTypeThread;
+			tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, indexType, 0, tInfo->nNeurons[neuronType]);
+			tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, indexType, 1, tInfo->nNeurons[neuronType]);
+		}
 	}
 }
 

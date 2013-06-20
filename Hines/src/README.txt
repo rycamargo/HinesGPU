@@ -1,3 +1,18 @@
+/*****************************************
+ * Building
+ *****************************************/
+
+buildLinux.sh: Compile the code for Linux
+buildLinuxGdb.sh: Compile the code using gdb flags
+buildLinuxMpi.sh: Compile the code for MPI
+
+The Nsight IDE can build the project automatically. You need only to include the
+flag -lpthread in the project build properties.
+
+/*****************************************
+ * Execution
+ *****************************************/
+
 Usage: ./HinesGpu <mode> <simType> <nNeurons> <nGPUs> [seed]
 
 Example: ./HinesGpu G n1l 10000 1
@@ -26,6 +41,16 @@ Number of GPUs to use per process
 
 [seed]
 Optional seed for random number generator
+
+
+/*****************************************
+ * Network
+ *****************************************/
+
+Network with random connections created with method Connections::connectRandom
+- Connects 3 types of neurons (Pyramidal, Inhibitory, Basket)
+- Connection weights and ratios defined in the lauchHines.cpp file
+- All neuron types have 4 compartments
 
 /*****************************************
  * Output Files

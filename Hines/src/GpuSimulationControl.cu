@@ -43,9 +43,10 @@ void checkCUDAError(const char *msg)
 
 #ifdef MPI_GPU_NN
 	MPI_Abort (MPI_COMM_WORLD, -1);
-	//MPI_Finalize();
+	MPI_Finalize();
 #endif
-        exit(EXIT_FAILURE);
+        //exit(EXIT_FAILURE);
+	exit(-1);
     }
 }
 

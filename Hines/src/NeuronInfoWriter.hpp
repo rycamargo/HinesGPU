@@ -36,7 +36,7 @@ public:
     void updateSampleVm(int kStep);
     void writeSampleVm(int kStep);
 
-    void writeResultsToFile(char mode, int nNeuronsTotal, int nComp, struct BenchTimes & bench);
+    void writeResultsToFile(char mode, int nNeuronsTotal, int nComp, char* simType, struct BenchTimes & bench);
 };
 
 #endif /* NEURONINFOWRITER_H_ */

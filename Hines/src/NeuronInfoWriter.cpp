@@ -113,16 +113,15 @@ void NeuronInfoWriter::writeSampleVm(int kStep)
 			vmTimeSerie[0][i-kStep], vmTimeSerie[1][i-kStep], vmTimeSerie[2][i - kStep], vmTimeSerie[3][i - kStep]);
 }
 
-void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nComp,
-		BenchTimes & bench) {
+void NeuronInfoWriter::writeResultsToFile(char mode, int nNeuronsTotal, int nComp, char* simType, BenchTimes & bench) {
 
 	printf ("Setup=%-10.3f Prepare=%-10.3f Execution=%-10.3f Total=%-10.3f\n", bench.matrixSetupF, bench.execPrepareF, bench.execExecutionF, bench.finishF);
 	printf ("HinesKernel=%-10.3f ConnRead=%-10.3f ConnWait=%-10.3f ConnWrite=%-10.3f mpiConnWait=%-10.3f\n",
 			bench.totalHinesKernel, bench.totalConnRead, bench.totalConnWait, bench.totalConnWrite, bench.totalMpiSpikeTransfer);
 	printf ("%f %f %f\n", tInfo->sharedData->inputSpikeRate, tInfo->sharedData->pyrPyrConnRatio, tInfo->sharedData->pyrInhConnRatio);
 
-	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu\n",
-			mode, nNeuronsTotal, tInfo->totalTypes, nComp, sharedData->nThreadsCpu, sizeof(ftype));
+	fprintf (resultFile, "mode=%c neurons=%-6d types=%-2d comp=%-2d threads=%d ftype=%lu simtype=%s\n",
+			mode, nNeuronsTotal, tInfo->totalTypes, nComp, sharedData->nThreadsCpu, sizeof(ftype), simType);
 	fprintf (resultFile, "meanGenSpikes[T|P|I|B]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f]\n",
 			bench.meanGenSpikes, bench.meanGenSpikesType[PYRAMIDAL_CELL], bench.meanGenSpikesType[INHIBITORY_CELL], bench.meanGenSpikesType[BASKET_CELL]);
 	fprintf (resultFile, "meanRecSpikes[T|P|I]=[%-10.5f|%-10.5f|%-10.5f|%-10.5f] \n",

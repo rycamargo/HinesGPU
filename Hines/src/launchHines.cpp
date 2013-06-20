@@ -654,7 +654,7 @@ int main(int argc, char **argv) {
 	int nNeuronsTotal = 0;
 
 	if ( argc < 4 ) {
-		printf("Invalid arguments!\n Usage: %s <mode> <simType> <nNeurons> <nThreads> [seed]\n", argv[0]);
+		printf("Invalid arguments!\n Usage: %s <mode> <simType> <nNeurons> <nGPUs> [seed]\n", argv[0]);
 		printf("Invalid arguments!\n Usage: %s <mode> <simType> <nNeurons> <configFile> [seed]\n", argv[0]);
 
 		exit(-1);

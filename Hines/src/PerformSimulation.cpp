@@ -28,8 +28,6 @@
 
 #include <cuda_runtime_api.h> // Necessary to allow better eclipse integration
 
-extern void checkCUDAError(const char *msg);
-
 PerformSimulation::PerformSimulation(struct ThreadInfo *tInfo) {
 
 	this->tInfo      = tInfo;

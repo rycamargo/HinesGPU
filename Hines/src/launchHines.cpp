@@ -270,7 +270,6 @@ void configureNeuronTypes(char*& simType, ThreadInfo*& tInfo, int nNeuronsTotal,
 
 					if (rateNeuronsType > 0) {
 						nNeuronsGlobal[ tInfo->totalTypes ] = roundf(nNeuronsTypeTotal[t] * rateNeuronsType);
-						//printf("test=%d %d %.4f\n",nNeuronsGlobal[ tInfo->totalTypes ], nNeuronsTypeTotal[t], rateNeuronsType);
 						typeListGlobal[ tInfo->totalTypes ] = t;
 						tInfo->totalTypes++;
 					}
@@ -278,8 +277,6 @@ void configureNeuronTypes(char*& simType, ThreadInfo*& tInfo, int nNeuronsTotal,
 				endTypeThreadGlobal[iProcess * maxTh + iThread] = tInfo->totalTypes;
 				endTypeProcessGlobal[iProcess] = tInfo->totalTypes;
 			}
-
-
 
 		}
 
@@ -341,45 +338,37 @@ void configureNeuronTypes(char*& simType, ThreadInfo*& tInfo, int nNeuronsTotal,
 		// Check if the total number of neurons is correct
 		for (int gType=0; gType < tInfo->nTypes; gType++) {
 
-		  if (tInfo->nNeuronsTotalType[gType] != nNeuronsTypeTotal[gType]) {
+			// Corrects the distribution of neurons caused by rounding errors
+			if (tInfo->nNeuronsTotalType[gType] != nNeuronsTypeTotal[gType]) {
 
-		    //printf("ERROR1: Number of neurons do not match: nNeuronsType=%d|%d\n", tInfo->nNeuronsTotalType[gType], nNeuronsTypeTotal[gType]);
+				printf("CORRECTING ERROR: Number of neurons do not match: nNeuronsType=%d|%d\n", tInfo->nNeuronsTotalType[gType], nNeuronsTypeTotal[gType]);
 
-		    printf("CORRECTING ERROR: Number of neurons do not match: nNeuronsType=%d|%d\n", tInfo->nNeuronsTotalType[gType], nNeuronsTypeTotal[gType]);
+				int nTypeInstances = 0;
+				for (int tmp=0; tmp < tInfo->totalTypes; tmp++)
+					if (tInfo->sharedData->typeList[tmp] == gType)
+						nTypeInstances++;
+
+				int diff = nNeuronsTypeTotal[gType] - tInfo->nNeuronsTotalType[gType];
+				for (int tmp=0; tmp < tInfo->totalTypes; tmp++)
+					if (tInfo->sharedData->typeList[tmp] == gType)
+						tInfo->nNeurons[tmp] += diff / nTypeInstances;
 
 
-		    int nTypeInstances = 0;
-		    for (int tmp=0; tmp < tInfo->totalTypes; tmp++)
-		      if (tInfo->sharedData->typeList[tmp] == gType)
-			nTypeInstances++;
+				tInfo->nNeuronsTotalType[ gType ] = 0;
+				for (int tmp=0; tmp < tInfo->totalTypes; tmp++)
+					if (tInfo->sharedData->typeList[tmp] == gType)
+						tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[tmp] ] += tInfo->nNeurons[tmp];
 
-		    int diff = nNeuronsTypeTotal[gType] - tInfo->nNeuronsTotalType[gType];
-                    //printf("diff=%d|%d typesTotal=%d\n", diff, diff/nTypeInstances, nTypeInstances);
-		    for (int tmp=0; tmp < tInfo->totalTypes; tmp++)
-		      if (tInfo->sharedData->typeList[tmp] == gType) {
-			//printf("nNeurons=%d gType=%d type=%d\n", tInfo->nNeurons[tmp], gType, tmp);
-			tInfo->nNeurons[tmp] += diff / nTypeInstances;
-		      }		      
+			}
 
-		    tInfo->nNeuronsTotalType[ gType ] = 0;
-		    for (int tmp=0; tmp < tInfo->totalTypes; tmp++)
-		      if (tInfo->sharedData->typeList[tmp] == gType)
-			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[tmp] ] += tInfo->nNeurons[tmp];
-		    
-		  }
-
-		  if (tInfo->nNeuronsTotalType[gType] != nNeuronsTypeTotal[gType]) {
-		    printf("ERROR2: Number of neurons do not match: nNeuronsType=%d|%d\n", tInfo->nNeuronsTotalType[gType], nNeuronsTypeTotal[gType]);
-		    assert(tInfo->nNeuronsTotalType[gType] == nNeuronsTypeTotal[gType]);
-		  }
+			if (tInfo->nNeuronsTotalType[gType] != nNeuronsTypeTotal[gType]) {
+				printf("ERROR2: Number of neurons do not match: nNeuronsType=%d|%d\n", tInfo->nNeuronsTotalType[gType], nNeuronsTypeTotal[gType]);
+				assert(tInfo->nNeuronsTotalType[gType] == nNeuronsTypeTotal[gType]);
+			}
 
 		}
 
-		// TODO: Implement the profiler
-
 		fclose(fp);
-
-		//exit(0);
 
 	}
 }
@@ -717,7 +706,7 @@ int main(int argc, char **argv) {
 	bench.finishF = (bench.finish - bench.start)/1000.; 
 
 	// TODO: The total number of neurons is wrong
-	tInfo->sharedData->neuronInfoWriter->writeResultsToFile(mode, nNeuronsTotal, tInfo->nComp[0], bench);
+	tInfo->sharedData->neuronInfoWriter->writeResultsToFile(mode, nNeuronsTotal, tInfo->nComp[0], simType, bench);
 	//delete tInfo->sharedData->neuronInfoWriter;
 
 	if (tInfo->sharedData->profileKernel) {
@@ -728,18 +717,14 @@ int main(int argc, char **argv) {
 		printf("PROFILER: Total per thread\n");
 		tInfo->sharedData->profiler->printProfile(-1);
 
-//		for(int t = tInfo->startTypeThread; t < tInfo->endTypeThread; t++) {
-//			tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, t, 0, tInfo->nNeurons[t]);
-//			tInfo->sharedData->profiler->setProfileInfo(tInfo->threadNumber, t, 1, tInfo->nNeurons[t]);
-//		}
-
 		char *simType = argv[2];
 		int nConnPerNeuron = 100;
 		if (simType[1]=='2') nConnPerNeuron = 1000;
 		int rateLevel = 0;
 		if (simType[2]=='h') rateLevel = 1;
 
-		tInfo->sharedData->profiler->printProfileToFile(tInfo->totalTypes, nConnPerNeuron, rateLevel);
+		tInfo->sharedData->profiler->printProfileToFile(
+				nNeuronsTotal, nProcesses, tInfo->totalTypes, nConnPerNeuron, rateLevel);
 	}
 
 	delete[] tInfo->nNeurons;

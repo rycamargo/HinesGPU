@@ -155,12 +155,12 @@ void configureNeuronTypes(char*& simType, ThreadInfo*& tInfo, int nNeuronsTotal,
 			tInfo->nNeurons[i + 1] = nNeuronsTotal / (tInfo->totalTypes);
 			tInfo->nComp[i + 1] = nComp;
 			tInfo->sharedData->typeList[i + 1] = INHIBITORY_CELL;
-			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i] ] += tInfo->nNeurons[i];
+			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i+1] ] += tInfo->nNeurons[i+1];
 
 			tInfo->nNeurons[i + 2] = nNeuronsTotal / (tInfo->totalTypes);
 			tInfo->nComp[i + 2] = nComp;
 			tInfo->sharedData->typeList[i + 2] = BASKET_CELL;
-			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i] ] += tInfo->nNeurons[i];
+			tInfo->nNeuronsTotalType[ tInfo->sharedData->typeList[i+2] ] += tInfo->nNeurons[i+2];
 
 		}
 	}
